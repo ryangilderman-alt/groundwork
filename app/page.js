@@ -669,15 +669,18 @@ export default function Home(){
                   <div className="mb20"><div className="eyebrow">SEQUENCE RESULTS</div><h2 className="serif" style={{fontSize:22,fontWeight:400,letterSpacing:"-.5px",marginBottom:8}}>{seqForm.firstName} {seqForm.lastName} · {seqType.label}</h2><div className="row gap8 wrap-row"><span className="tag" style={{background:`${seqType.color}12`,color:seqType.color,border:`1px solid ${seqType.color}30`}}>{seqType.icon} {seqType.label}</span><span className="tag" style={{background:`${persona.color}12`,color:persona.color,border:`1px solid ${persona.color}30`}}>{persona.icon} {persona.label}</span><span className="tag" style={{background:"var(--surf)",color:"var(--mt)"}}>{seqForm.company}</span></div></div>
                   <div className="row gap12" style={{alignItems:"flex-start"}}>
                     <div style={{width:172,flexShrink:0}}>
-                      {seqType.steps.map(sid=>{
+                      {(()=>{
+                        const stepsOrder=seqType.steps;
+                        return stepsOrder.map(sid=>{
                         const t=TOUCHES.find(x=>x.id===sid);if(!t)return null;
                         const isA=activeStep===sid;const cs=CH[t.ch];
                         return <button key={sid} onClick={()=>setActiveStep(sid)} className="step-btn" style={{background:isA?cs.bg:"transparent",borderColor:isA?cs.bd:"rgba(255,255,255,.07)"}}><span style={{fontSize:13}}>{t.icon}</span><div><div style={{fontSize:9,color:isA?cs.tx:"#5a5850",textTransform:"uppercase",letterSpacing:"1px"}}>{t.dl}</div><div style={{fontSize:11,fontWeight:isA?500:400,color:isA?"#e8e3d8":"#5a5850"}}>{t.label}</div></div></button>;
-                      })}
+                      });})()}
                     </div>
                     {(()=>{
                       const t=TOUCHES.find(x=>x.id===activeStep);const c=generated[activeStep];
-                      const sl=seqType.steps;const idx=sl.indexOf(activeStep);
+                      const sl=seqType.steps;
+                      const idx=sl.indexOf(activeStep);
                       if(!t||!c)return null;const cs=CH[t.ch];
                       return(
                         <div style={{flex:1}}>
