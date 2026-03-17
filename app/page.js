@@ -58,6 +58,7 @@ const CH = {
   Voicemail:{bg:"rgba(74,222,128,.1)", bd:"rgba(74,222,128,.3)", tx:"#86efac"},
   SMS:      {bg:"rgba(192,132,252,.1)",bd:"rgba(192,132,252,.3)",tx:"#d8b4fe"},
 };
+const INDUSTRY_TEMPLATES = ["SaaS","FinTech","HR Tech","Sales Tech","Healthcare","Manufacturing","Retail","Real Estate","Legal","Insurance","Media","Education"];
 
 const sGet  = async k    => {try{const v=localStorage.getItem(k);return v?JSON.parse(v):null;}catch{return null;}};
 const sSet  = async(k,v) => {try{localStorage.setItem(k,JSON.stringify(v));return true;}catch{return false;}};
@@ -182,6 +183,7 @@ export default function Home(){
   const [geminiKey,setGeminiKey]=useState("");
   const [geminiInput,setGeminiInput]=useState("");
   const [autoResearchingCo,setAutoResearchingCo]=useState(false);
+  const [humanizingStep,setHumanizingStep]=useState(null);
 
   const ref=useRef({});
   ref.current={co,coIntel,prospects,acctStatus,acctNotes};
@@ -368,6 +370,20 @@ export default function Home(){
   const totalT=p=>(SEQ_TYPES.find(t=>t.id===p.seqTypeId)||SEQ_TYPES[0]).steps.length;
   const cp=(text,id)=>{navigator.clipboard.writeText(text);setCopied(id);setTimeout(()=>setCopied(""),2000);};
 
+  const humanizeStep=async(sid)=>{
+    const c=generated[sid];if(!c?.body){setErr("No message to humanize.");return;}
+    setErr("");setHumanizingStep(sid);
+    try{
+      const r=await fetch("/api/claude",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1024,system:"Rewrite the following sales message to sound more natural and human, less templated or robotic. Keep the same intent and length. If a subject line is provided, return JSON: {\"subject\":\"...\",\"body\":\"...\"}. Otherwise return JSON: {\"body\":\"...\"}. Return only that JSON, no other text.",messages:[{role:"user",content:(c.subject?`Subject: ${c.subject}\n\n`:"")+c.body}]})});
+      const d=await r.json();
+      if(!r.ok||d.error) throw new Error(d.error?.message||d.message||"Humanize failed");
+      const t=(d.content||[]).map(b=>b.text||"").join("");
+      const out=parseJsonFromText(t);
+      setGenerated(prev=>({...prev,[sid]:{subject:out.subject??prev[sid]?.subject??"",body:out.body||prev[sid]?.body||""}}));
+    }catch(e){setErr(e?.message||"Humanize failed.");}
+    setHumanizingStep(null);
+  };
+
   const saveSeller=async()=>{
     if(!seller.problemSolved||!seller.icp){setErr("Fill in Problem Solved and ICP.");return;}
     await sSet("gw-seller",seller);setProfileDone(true);setShowProfile(false);setErr("");
@@ -475,7 +491,7 @@ export default function Home(){
                 <>
                   <div className="between mb20"><div><div className="eyebrow">RESEARCH HUB</div><h2 className="serif" style={{fontSize:24,fontWeight:400,letterSpacing:"-.5px"}}>Company Research</h2>{profileDone&&<p style={{fontSize:11,color:"#5a5850",marginTop:4}}>Tailored to: &quot;{seller.problemSolved.slice(0,50)}...&quot;</p>}</div>{co.name&&<div className="row gap8"><select value={acctStatus} onChange={e=>setAcctStatus(e.target.value)} style={{padding:"5px 8px",borderRadius:6,background:"var(--surf)",border:"1px solid var(--bd)",color:"var(--tx)",fontSize:11,fontFamily:"inherit"}}>{STATUSES.map(s=><option key={s.id} value={s.id}>{s.label}</option>)}</select><AB onClick={save} color="#4ade80" sm>{savedMsg||"Save"}</AB></div>}</div>
                   {profileDone&&<div className="am-chip row gap10 mb14"><span style={{fontSize:11,color:"#f0a500"}}>◆</span><span style={{fontSize:11,color:"#f0a500",flex:1}}>{seller.problemSolved.slice(0,65)}{seller.problemSolved.length>65?"...":""}</span><button onClick={()=>setShowProfile(true)} style={{fontSize:9,color:"#5a5850",background:"none",border:"none",cursor:"pointer",fontFamily:"inherit",letterSpacing:"1.5px"}}>EDIT</button></div>}
-                  <div className="box mb12"><div className="lbl">TARGET ACCOUNT</div><div className="g3"><Fld label="Company *" value={co.name} onChange={e=>setCo(c=>({...c,name:e.target.value}))} ph="Acme Corp"/><Fld label="Industry" value={co.industry} onChange={e=>setCo(c=>({...c,industry:e.target.value}))} ph="SaaS / FinTech"/><Fld label="Website" value={co.website} onChange={e=>setCo(c=>({...c,website:e.target.value}))} ph="acme.com"/></div></div>
+                  <div className="box mb12"><div className="lbl">TARGET ACCOUNT</div><div className="g3"><Fld label="Company *" value={co.name} onChange={e=>setCo(c=>({...c,name:e.target.value}))} ph="Acme Corp"/><Fld label="Industry" value={co.industry} onChange={e=>setCo(c=>({...c,industry:e.target.value}))} ph="SaaS / FinTech"/><Fld label="Website" value={co.website} onChange={e=>setCo(c=>({...c,website:e.target.value}))} ph="acme.com"/></div><div style={{marginTop:10}}><div className="fl" style={{marginBottom:6}}>Industry templates</div><div className="row gap6 wrap-row">{INDUSTRY_TEMPLATES.map(ind=><button key={ind} type="button" onClick={()=>setCo(c=>({...c,industry:ind}))} className="ppill" style={{marginBottom:4}}>{ind}</button>)}</div></div></div>
                   <div className="box mb12" style={{borderColor:"rgba(240,165,0,.3)"}}>
                     <div className="lbl" style={{color:"#f0a500"}}>AUTO RESEARCH — LIVE WEB</div>
                     <p style={{fontSize:11,color:"#5a5850",marginBottom:12,lineHeight:1.6}}>Claude will search the live web and return structured intel automatically. No copy-paste needed.</p>
@@ -688,7 +704,7 @@ export default function Home(){
                             <div className="between mb14"><div className="row gap10"><span style={{fontSize:20}}>{t.icon}</span><div><div style={{fontSize:9,color:"#5a5850",textTransform:"uppercase",letterSpacing:"2px"}}>{t.dl} · {t.ch}</div><div className="serif" style={{fontSize:15}}>{t.label}</div></div></div><span className="tag" style={{background:cs.bg,color:cs.tx,border:`1px solid ${cs.bd}`}}>{t.ch}</span></div>
                             {c.subject&&<div className="mb10"><div className="lbl">SUBJECT</div><div style={{padding:"8px 11px",background:"var(--amdim)",border:"1px solid var(--ambdr)",borderRadius:6,fontSize:13,fontWeight:500,color:"#f0a500"}}>{c.subject}</div></div>}
                             <div className="mb14"><div className="lbl">MESSAGE</div><div style={{padding:"13px",background:"rgba(0,0,0,.25)",border:"1px solid rgba(255,255,255,.07)",borderRadius:7,fontSize:13,lineHeight:1.85,whiteSpace:"pre-wrap",color:"#e8e3d8"}}>{c.body}</div></div>
-                            <div className="row gap6">{c.subject&&<button className={`cpbtn${copied===activeStep+"_s"?" ok":""}`} onClick={()=>cp(c.subject,activeStep+"_s")}>{copied===activeStep+"_s"?"COPIED":"COPY SUBJECT"}</button>}<button className={`cpbtn pri${copied===activeStep+"_b"?" ok":""}`} onClick={()=>cp(c.body,activeStep+"_b")}>{copied===activeStep+"_b"?"COPIED":"COPY MESSAGE"}</button><button className={`cpbtn${copied===activeStep+"_a"?" ok":""}`} onClick={()=>cp(`Subject:${c.subject||""}\n\n${c.body}`,activeStep+"_a")}>{copied===activeStep+"_a"?"COPIED":"COPY BOTH"}</button></div>
+                            <div className="row gap6">{c.subject&&<button className={`cpbtn${copied===activeStep+"_s"?" ok":""}`} onClick={()=>cp(c.subject,activeStep+"_s")}>{copied===activeStep+"_s"?"COPIED":"COPY SUBJECT"}</button>}<button className={`cpbtn pri${copied===activeStep+"_b"?" ok":""}`} onClick={()=>cp(c.body,activeStep+"_b")}>{copied===activeStep+"_b"?"COPIED":"COPY MESSAGE"}</button><button className={`cpbtn${copied===activeStep+"_a"?" ok":""}`} onClick={()=>cp(`Subject:${c.subject||""}\n\n${c.body}`,activeStep+"_a")}>{copied===activeStep+"_a"?"COPIED":"COPY BOTH"}</button><button className="cpbtn pri" onClick={()=>humanizeStep(activeStep)} disabled={humanizingStep===activeStep} style={{marginLeft:"auto"}}>{humanizingStep===activeStep?<><span className="spin"/>Humanizing...</>:"Humanize"}</button></div>
                           </div>
                           <div className="between"><button disabled={idx===0} onClick={()=>setActiveStep(sl[idx-1])} style={{padding:"6px 12px",borderRadius:7,background:"transparent",border:"1px solid rgba(255,255,255,.07)",color:idx===0?"#2a2924":"#5a5850",cursor:idx===0?"not-allowed":"pointer",fontFamily:"inherit",fontSize:11}}>← PREV</button><span style={{fontSize:10,color:"#5a5850",letterSpacing:"1px"}}>{idx+1} / {sl.length}</span><button disabled={idx===sl.length-1} onClick={()=>setActiveStep(sl[idx+1])} style={{padding:"6px 12px",borderRadius:7,background:idx===sl.length-1?"transparent":"#f0a500",border:idx===sl.length-1?"1px solid rgba(255,255,255,.07)":"none",color:idx===sl.length-1?"#2a2924":"#0a0a08",cursor:idx===sl.length-1?"not-allowed":"pointer",fontFamily:"inherit",fontSize:11,fontWeight:500}}>NEXT →</button></div>
                         </div>
