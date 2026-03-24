@@ -188,6 +188,8 @@ export default function Home(){
   const [bobiStageFilter,setBobiStageFilter]=useState("all");
   const [bobiSearch,setBobiSearch]=useState("");
   const [bobiDetailId,setBobiDetailId]=useState(null);
+  const [seqViewMode,setSeqViewMode]=useState("type");
+  const [seqTypeFilter,setSeqTypeFilter]=useState("all");
 
   const ref=useRef({});
   ref.current={co,coIntel,prospects,acctStatus,acctNotes};
@@ -548,7 +550,7 @@ export default function Home(){
             </div>
           ))}
           
-          {view==="sequence"&&<div className="snav">{["build","results"].map(t=><div key={t} className={`sni${seqTab===t?" on":""}`} onClick={()=>{if(t==="results"&&!generated)return;setSeqTab(t);}} style={{opacity:t==="results"&&!generated?0.35:1}}>{t.charAt(0).toUpperCase()+t.slice(1)}</div>)}</div>}
+          {view==="sequence"&&<div className="snav">{["build","results"].map(t=><div key={t} className={`sni${seqTab===t?" on":""}`} onClick={()=>setSeqTab(t)}>{t.charAt(0).toUpperCase()+t.slice(1)}</div>)}</div>}
           {view==="tracker"&&prospects.length>0&&<div className="snav">{prospects.map((p,i)=><div key={i} className={`sni${trackerPi===i?" on":""}`} onClick={()=>setTrackerPi(i)}><div className="av" style={{width:16,height:16,fontSize:8,background:`hsl(${i*55+180},50%,40%)`}}>{p.firstName[0]}</div><span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.firstName} {p.lastName}</span>{p.sequence&&<span style={{marginLeft:"auto",fontSize:9,color:"#4ade80",flexShrink:0}}>{doneCount(p)}/{totalT(p)}</span>}</div>)}</div>}
         </div>
         <div className="sb-bot">
@@ -739,38 +741,40 @@ export default function Home(){
                   <button className="gen-btn" disabled={generating} onClick={generateSeq}>{generating?<><span className="spin"/>GENERATING...</>:`GENERATE ${seqType.label.toUpperCase()} SEQUENCE`}</button>
                 </>
               )}
-              {seqTab==="results"&&generated&&(
+              {seqTab==="results"&&(
                 <>
-                  <div className="mb20"><div className="eyebrow">SEQUENCE RESULTS</div><h2 className="serif" style={{fontSize:22,fontWeight:400,letterSpacing:"-.5px",marginBottom:8}}>{seqForm.firstName} {seqForm.lastName} · {seqType.label}</h2><div className="row gap8 wrap-row"><span className="tag" style={{background:`${seqType.color}12`,color:seqType.color,border:`1px solid ${seqType.color}30`}}>{seqType.icon} {seqType.label}</span><span className="tag" style={{background:`${persona.color}12`,color:persona.color,border:`1px solid ${persona.color}30`}}>{persona.icon} {persona.label}</span><span className="tag" style={{background:"var(--surf)",color:"var(--mt)"}}>{seqForm.company}</span></div></div>
-                  <div className="row gap12" style={{alignItems:"flex-start"}}>
-                    <div style={{width:172,flexShrink:0}}>
-                      {(()=>{
-                        const stepsOrder=seqType.steps;
-                        return stepsOrder.map(sid=>{
-                        const t=TOUCHES.find(x=>x.id===sid);if(!t)return null;
-                        const isA=activeStep===sid;const cs=CH[t.ch];
-                        return <button key={sid} onClick={()=>setActiveStep(sid)} className="step-btn" style={{background:isA?cs.bg:"transparent",borderColor:isA?cs.bd:"rgba(255,255,255,.07)"}}><span style={{fontSize:13}}>{t.icon}</span><div><div style={{fontSize:9,color:isA?cs.tx:"#5a5850",textTransform:"uppercase",letterSpacing:"1px"}}>{t.dl}</div><div style={{fontSize:11,fontWeight:isA?500:400,color:isA?"#e8e3d8":"#5a5850"}}>{t.label}</div></div></button>;
-                      });})()}
-                    </div>
-                    {(()=>{
-                      const t=TOUCHES.find(x=>x.id===activeStep);const c=generated[activeStep];
-                      const sl=seqType.steps;
-                      const idx=sl.indexOf(activeStep);
-                      if(!t||!c)return null;const cs=CH[t.ch];
-                      return(
-                        <div style={{flex:1}}>
-                          <div className="box mb10">
-                            <div className="between mb14"><div className="row gap10"><span style={{fontSize:20}}>{t.icon}</span><div><div style={{fontSize:9,color:"#5a5850",textTransform:"uppercase",letterSpacing:"2px"}}>{t.dl} · {t.ch}</div><div className="serif" style={{fontSize:15}}>{t.label}</div></div></div><span className="tag" style={{background:cs.bg,color:cs.tx,border:`1px solid ${cs.bd}`}}>{t.ch}</span></div>
-                            {c.subject&&<div className="mb10"><div className="lbl">SUBJECT</div><div style={{padding:"8px 11px",background:"var(--amdim)",border:"1px solid var(--ambdr)",borderRadius:6,fontSize:13,fontWeight:500,color:"#f0a500"}}>{c.subject}</div></div>}
-                            <div className="mb14"><div className="lbl">MESSAGE</div><div style={{padding:"13px",background:"rgba(0,0,0,.25)",border:"1px solid rgba(255,255,255,.07)",borderRadius:7,fontSize:13,lineHeight:1.85,whiteSpace:"pre-wrap",color:"#e8e3d8"}}>{c.body}</div></div>
-                            <div className="row gap6">{c.subject&&<button className={`cpbtn${copied===activeStep+"_s"?" ok":""}`} onClick={()=>cp(c.subject,activeStep+"_s")}>{copied===activeStep+"_s"?"COPIED":"COPY SUBJECT"}</button>}<button className={`cpbtn pri${copied===activeStep+"_b"?" ok":""}`} onClick={()=>cp(c.body,activeStep+"_b")}>{copied===activeStep+"_b"?"COPIED":"COPY MESSAGE"}</button><button className={`cpbtn${copied===activeStep+"_a"?" ok":""}`} onClick={()=>cp(`Subject:${c.subject||""}\n\n${c.body}`,activeStep+"_a")}>{copied===activeStep+"_a"?"COPIED":"COPY BOTH"}</button><button className="cpbtn pri" onClick={()=>humanizeStep(activeStep)} disabled={humanizingStep===activeStep} style={{marginLeft:"auto"}}>{humanizingStep===activeStep?<><span className="spin"/>Humanizing...</>:"Humanize"}</button></div>
-                          </div>
-                          <div className="between"><button disabled={idx===0} onClick={()=>setActiveStep(sl[idx-1])} style={{padding:"6px 12px",borderRadius:7,background:"transparent",border:"1px solid rgba(255,255,255,.07)",color:idx===0?"#2a2924":"#5a5850",cursor:idx===0?"not-allowed":"pointer",fontFamily:"inherit",fontSize:11}}>← PREV</button><span style={{fontSize:10,color:"#5a5850",letterSpacing:"1px"}}>{idx+1} / {sl.length}</span><button disabled={idx===sl.length-1} onClick={()=>setActiveStep(sl[idx+1])} style={{padding:"6px 12px",borderRadius:7,background:idx===sl.length-1?"transparent":"#f0a500",border:idx===sl.length-1?"1px solid rgba(255,255,255,.07)":"none",color:idx===sl.length-1?"#2a2924":"#0a0a08",cursor:idx===sl.length-1?"not-allowed":"pointer",fontFamily:"inherit",fontSize:11,fontWeight:500}}>NEXT →</button></div>
-                        </div>
-                      );
-                    })()}
-                  </div>
-                  <button onClick={()=>{setSeqTab("build");setGenerated(null);}} style={{marginTop:16,padding:"6px 12px",borderRadius:7,background:"transparent",border:"1px solid rgba(255,255,255,.07)",color:"#5a5850",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>+ NEW SEQUENCE</button>
+                  {(()=>{
+                    const allSeq = accounts.flatMap(a=>(a.prospects||[]).filter(p=>p.sequence).map(p=>{
+                      const st=SEQ_TYPES.find(t=>t.id===p.seqTypeId)||SEQ_TYPES[0];
+                      const done = Object.keys(p.touchDone||{}).length;
+                      const nextId = st.steps.find(id=>!(p.touchDone||{})[id]);
+                      const nextTouch = nextId ? (TOUCHES.find(t=>t.id===nextId)?.label || nextId) : "Complete";
+                      const dueDate = nextId ? (()=>{ const d = TOUCHES.find(t=>t.id===nextId)?.day||1; const base = p.seqStartDate?new Date(p.seqStartDate):new Date(); return new Date(base.getTime()+d*86400000); })() : null;
+                      const overdue = dueDate ? dueDate < new Date() : false;
+                      return {account:a, prospect:p, st, done, total:st.steps.length, nextTouch, dueDate, overdue};
+                    }));
+                    const overdueRows = allSeq.filter(r=>r.overdue);
+                    const filtered = allSeq.filter(r=>seqTypeFilter==="all"||r.st.id===seqTypeFilter).sort((a,b)=>Number(b.overdue)-Number(a.overdue));
+                    const grouped = SEQ_TYPES.map(st=>({st,rows:filtered.filter(r=>r.st.id===st.id)})).filter(g=>g.rows.length);
+                    const fmtDue = d=>d?d.toLocaleDateString("en-US",{month:"short",day:"numeric"}):"—";
+                    const status = r=>r.overdue?"Overdue":(r.dueDate&&Math.abs((r.dueDate-new Date())/86400000)<1?"Due Today":"On Track");
+                    const statusColor = s=>s==="Overdue"?"#b91c1c":s==="Due Today"?"#b45309":"#15803d";
+                    return <>
+                      <div className="between mb14">
+                        <div><div className="eyebrow">SEQUENCE</div><h2 className="serif" style={{fontSize:24,fontWeight:500}}>Active Sequences</h2><p style={{fontSize:12,color:"#57534e"}}>{allSeq.length} active prospect sequence(s)</p></div>
+                        <button className="cpbtn pri" onClick={()=>setSeqTab("build")}>+ New Sequence</button>
+                      </div>
+                      {overdueRows.length>0&&<div className="box mb12" style={{background:"rgba(185,28,28,.08)",borderColor:"rgba(185,28,28,.25)"}}><div className="lbl" style={{color:"#b91c1c"}}>Overdue</div><p style={{fontSize:12,color:"#7f1d1d"}}>{overdueRows.map(r=>`${r.prospect.firstName} ${r.prospect.lastName}`).join(", ")}</p></div>}
+                      <div className="between mb12">
+                        <div className="row gap8">{["type","prospect"].map(v=><button key={v} className={`ppill${seqViewMode===v?" on":""}`} onClick={()=>setSeqViewMode(v)}>{v==="type"?"By Sequence Type":"By Prospect"}</button>)}</div>
+                        <select className="fi" style={{maxWidth:280}} value={seqTypeFilter} onChange={e=>setSeqTypeFilter(e.target.value)}>
+                          <option value="all">All Sequence Types</option>
+                          {SEQ_TYPES.map(st=><option key={st.id} value={st.id}>{st.icon} {st.label}</option>)}
+                        </select>
+                      </div>
+                      {seqViewMode==="type" ? grouped.map(g=><div key={g.st.id} className="box mb12"><div className="between mb8"><span className="tag" style={{background:`${g.st.color}18`,color:g.st.color}}>{g.st.icon} {g.st.label}</span><span style={{fontSize:11,color:"#78716c"}}>{g.rows.length} prospect(s)</span></div><table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}><thead><tr style={{textAlign:"left",color:"#78716c"}}><th>Prospect</th><th>Company</th><th>Touch</th><th>Progress</th><th>Next Due</th><th>Status</th></tr></thead><tbody>{g.rows.map((r,i)=><tr key={i} style={{borderTop:"1px solid #e7e5e4"}}><td style={{padding:"8px 0"}}>{r.prospect.firstName} {r.prospect.lastName}</td><td>{r.account.co?.name}</td><td>{r.nextTouch}</td><td><div className="row gap8"><div style={{width:80,height:5,background:"#e7e5e4",borderRadius:3}}><div style={{height:"100%",width:`${(r.done/r.total)*100}%`,background:"#d97706",borderRadius:3}}/></div><span>{r.done}/{r.total}</span></div></td><td>{fmtDue(r.dueDate)}</td><td style={{color:statusColor(status(r))}}>{status(r)}</td></tr>)}</tbody></table></div>) : <div className="box"><table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}><thead><tr style={{textAlign:"left",color:"#78716c"}}><th>Prospect</th><th>Company</th><th>Sequence Type</th><th>Touch</th><th>Progress</th><th>Next Due</th><th>Status</th></tr></thead><tbody>{filtered.map((r,i)=><tr key={i} style={{borderTop:"1px solid #e7e5e4"}}><td style={{padding:"8px 0"}}>{r.prospect.firstName} {r.prospect.lastName}</td><td>{r.account.co?.name}</td><td>{r.st.icon} {r.st.label}</td><td>{r.nextTouch}</td><td>{r.done}/{r.total}</td><td>{fmtDue(r.dueDate)}</td><td style={{color:statusColor(status(r))}}>{status(r)}</td></tr>)}</tbody></table></div>}
+                    </>;
+                  })()}
                 </>
               )}
             </div>
