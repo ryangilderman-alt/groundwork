@@ -1,5 +1,12 @@
+// BoBi integration - force redeploy
 "use client";
 import { useState, useEffect, useRef } from "react";
+
+function useIsMounted(){
+  const [mounted,setMounted]=useState(false);
+  useEffect(()=>setMounted(true),[]);
+  return mounted;
+}
 
 const SEQ_TYPES = [
   { id:"cold",        label:"Cold Prospecting",    icon:"🎯", color:"#60a5fa", steps:["d1_li","d2_em","d4_vm","d8_em","d15_em","d18_sms","d22_em","d44_em"], tone:"Professional but warm. Lead with insight not pitch. Build familiarity before asking. Gradual escalation over 44 days." },
@@ -52,22 +59,37 @@ const CH = {
   Voicemail:{bg:"rgba(74,222,128,.1)", bd:"rgba(74,222,128,.3)", tx:"#86efac"},
   SMS:      {bg:"rgba(192,132,252,.1)",bd:"rgba(192,132,252,.3)",tx:"#d8b4fe"},
 };
+const INDUSTRY_TEMPLATES = ["SaaS","FinTech","HR Tech","Sales Tech","Healthcare","Manufacturing","Retail","Real Estate","Legal","Insurance","Media","Education"];
 
 const sGet  = async k    => {try{const v=localStorage.getItem(k);return v?JSON.parse(v):null;}catch{return null;}};
-const sSet  = async(k,v) => {try{await window.storage.set(k,JSON.stringify(v));return true;}catch{return false;}};
+const sSet  = async(k,v) => {try{localStorage.setItem(k,JSON.stringify(v));return true;}catch{return false;}};
 const sDel  = async k    => {try{localStorage.removeItem(k);return true;}catch{return false;}};
-const sList = async p    => {try{const r=await window.storage.list(p);return r?.keys||[];}catch{return[];}};
+const sList = async p    => {try{return Object.keys(localStorage).filter(k=>k.startsWith(p));}catch{return[]}};
 const acctKey = n => `acct:${n.toLowerCase().replace(/\s+/g,"-").replace(/[^a-z0-9-]/g,"")}`;
 const ts  = () => new Date().toISOString();
 const fmt = iso => {try{return new Date(iso).toLocaleDateString("en-US",{month:"short",day:"numeric"});}catch{return "—";}};
 
+function parseJsonFromText(raw) {
+  let t = (raw || "").replace(/```json|```/g, "").trim();
+  const start = t.indexOf("{");
+  if (start === -1) throw new Error("No JSON object found in response");
+  let depth = 0, end = -1;
+  for (let i = start; i < t.length; i++) {
+    if (t[i] === "{") depth++;
+    else if (t[i] === "}") { depth--; if (depth === 0) { end = i; break; } }
+  }
+  const jsonStr = end !== -1 ? t.slice(start, end + 1) : t.slice(start);
+  return JSON.parse(jsonStr);
+}
+
 async function ai(system,user){
   const r=await fetch("/api/claude",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:2500,system,messages:[{role:"user",content:user}]})});
   const d=await r.json();
+  if(!r.ok||d.error) throw new Error(d.error?.message||d.message||`API error (${r.status})`);
   const t=(d.content||[]).map(b=>b.text||"").join("");
-  return JSON.parse(t.replace(/```json|```/g,"").trim());
+  return parseJsonFromText(t);
 }
-// ── Claude Web Search Auto-Research ──────────────────────────────────────────
+
 async function webSearch(system, user) {
   const r = await fetch("/api/claude", {
     method:"POST", headers:{"Content-Type":"application/json"},
@@ -81,9 +103,8 @@ async function webSearch(system, user) {
   });
   const d = await r.json();
   if(d.error) throw new Error(d.error.message);
-  // Extract final text response from content blocks
   const text = (d.content||[]).filter(b=>b.type==="text").map(b=>b.text||"").join("").trim();
-  return JSON.parse(text.replace(/```json|```/g,"").trim());
+  return parseJsonFromText(text);
 }
 
 const WS_CO = (co,industry,seller) =>
@@ -107,97 +128,12 @@ const S_CI  = `Extract company intel. Return ONLY JSON:{"snapshot":"2-3 sentence
 const S_PI  = `Extract prospect intel. Return ONLY JSON:{"summary":"2-3 sentences","background":[],"content":[],"priorities":[],"pain":[],"angle":"best outreach angle","opener":"one sentence conversation starter","warmth":"Champion/Influencer/Gatekeeper/Unknown"}`;
 const S_SEQ = (st,p)=>`Expert B2B sales copywriter. SEQUENCE:${st.label}—${st.tone} PERSONA:${p.label}(${p.sub})—${p.tone} Return ONLY JSON keys:${st.steps.join(",")} each:{"subject":"or empty","body":"message"}. Voicemail<25w,SMS<30w,LinkedIn<300ch. No placeholders. Return ONLY valid JSON.`;
 
-const CSS=`
-@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Playfair+Display:wght@400;500;600&display=swap');
-*{box-sizing:border-box;margin:0;padding:0}
-:root{--bg:#0a0a08;--surf:#111110;--bd:rgba(255,255,255,.07);--tx:#e8e3d8;--mt:#5a5850;--dim:#2a2924;--am:#f0a500;--amdim:rgba(240,165,0,.12);--ambdr:rgba(240,165,0,.28)}
-@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
-@keyframes spin{to{transform:rotate(360deg)}}
-@keyframes pulse{0%,100%{opacity:.5}50%{opacity:1}}
-.fade{animation:fadeUp .22s ease forwards}
-input,textarea,select{font-family:inherit}
-input:focus,textarea:focus,select:focus{outline:none!important;border-color:var(--am)!important;box-shadow:0 0 0 2px rgba(240,165,0,.08)!important}
-select option{background:#111110;color:var(--tx)}
-::-webkit-scrollbar{width:2px}::-webkit-scrollbar-thumb{background:var(--dim)}
-button:not(:disabled):hover{opacity:.82}
-.app{min-height:100vh;background:var(--bg);font-family:'DM Mono',monospace;color:var(--tx);display:flex;align-items:flex-start}
-.serif{font-family:'Playfair Display',serif}
-.sb{width:200px;background:#080807;border-right:1px solid var(--bd);display:flex;flex-direction:column;padding:16px 0;flex-shrink:0;position:sticky;top:0;height:100vh;overflow-y:auto}
-.sb-logo{padding:0 16px 14px;border-bottom:1px solid var(--bd)}
-.sb-name{font-family:'Playfair Display',serif;font-size:18px;font-weight:600;letter-spacing:-.5px;margin-bottom:2px}
-.sb-tag{font-size:9px;color:var(--mt);letter-spacing:2.5px;text-transform:uppercase}
-.nav{padding:10px 8px;flex:1}
-.ni{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:6px;cursor:pointer;margin-bottom:1px;border-left:2px solid transparent}
-.ni.on{background:var(--amdim);border-left-color:var(--am)}
-.ni-icon{font-size:13px;color:var(--mt)}
-.ni.on .ni-icon{color:var(--am)}
-.ni-label{font-size:12px;color:var(--mt);flex:1;letter-spacing:.3px}
-.ni.on .ni-label{color:var(--tx);font-weight:500}
-.snav{margin-left:18px;margin-top:4px;padding-left:8px;border-left:1px solid var(--dim)}
-.sni{padding:5px 8px;border-radius:5px;cursor:pointer;margin-bottom:1px;font-size:11px;color:var(--mt);display:flex;align-items:center;gap:6px}
-.sni.on{background:rgba(255,255,255,.04);color:var(--tx)}
-.sb-bot{padding:0 8px 8px}
-.sb-card{background:var(--dim);border-radius:7px;padding:8px 10px;margin-bottom:6px}
-.main{flex:1;min-width:0}
-.wrap{max-width:920px;margin:0 auto;padding:36px 32px 120px}
-.eyebrow{font-size:9px;color:var(--mt);letter-spacing:3px;text-transform:uppercase;margin-bottom:6px}
-.box{background:var(--surf);border:1px solid var(--bd);border-radius:9px;padding:14px 16px}
-.lbl{font-size:9px;color:var(--mt);text-transform:uppercase;letter-spacing:2.5px;margin-bottom:10px}
-.fl{display:block;font-size:9px;color:var(--mt);margin-bottom:4px;text-transform:uppercase;letter-spacing:1.5px}
-.fi{width:100%;padding:7px 10px;border-radius:6px;background:transparent;border:1px solid var(--bd);color:var(--tx);font-size:12px}
-.ta{width:100%;padding:7px 10px;border-radius:6px;background:transparent;border:1px solid var(--bd);color:var(--tx);font-size:12px;resize:vertical;line-height:1.55}
-.g2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
-.g4{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px}
-.row{display:flex;align-items:center}
-.gap6{gap:6px}.gap8{gap:8px}.gap10{gap:10px}.gap12{gap:12px}.gap14{gap:14px}
-.between{display:flex;align-items:center;justify-content:space-between}
-.wrap-row{flex-wrap:wrap}
-.mb8{margin-bottom:8px}.mb10{margin-bottom:10px}.mb12{margin-bottom:12px}.mb14{margin-bottom:14px}.mb16{margin-bottom:16px}.mb20{margin-bottom:20px}.mb24{margin-bottom:24px}
-.abtn{border-radius:7px;font-family:inherit;font-weight:500;cursor:pointer;display:inline-flex;align-items:center;gap:7px;letter-spacing:.5px;border:none}
-.spin{width:11px;height:11px;border-radius:50%;border:2px solid var(--dim);border-top:2px solid currentColor;animation:spin .7s linear infinite;flex-shrink:0}
-.tag{padding:2px 8px;border-radius:6px;font-size:10px;font-weight:500}
-.icard{background:rgba(0,0,0,.2);border:1px solid var(--bd);border-radius:7px;padding:10px 12px}
-.ihead{font-size:9px;text-transform:uppercase;letter-spacing:2px;margin-bottom:7px}
-.iitem{font-size:11px;color:var(--mt);line-height:1.65;margin-bottom:3px;padding-left:8px;border-left:2px solid rgba(255,255,255,.08)}
-.paste{width:100%;padding:9px 11px;border-radius:7px;background:transparent;border:1px solid var(--bd);color:var(--tx);font-size:12px;resize:vertical;line-height:1.7}
-.qbox{margin-top:11px;background:rgba(0,0,0,.3);border-radius:7px;padding:10px 12px}
-.cpbtn{padding:5px 11px;border-radius:6px;background:transparent;border:1px solid var(--bd);color:var(--mt);font-size:10px;font-weight:500;cursor:pointer;font-family:inherit;letter-spacing:.5px}
-.cpbtn.ok{background:rgba(74,222,128,.1);border-color:rgba(74,222,128,.4);color:#4ade80}
-.cpbtn.pri{background:var(--amdim);border-color:var(--ambdr);color:var(--am)}
-.err{margin-top:8px;padding:7px 11px;background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.2);border-radius:6px;color:#f87171;font-size:11px}
-.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.9);backdrop-filter:blur(12px);z-index:300;display:flex;align-items:flex-start;justify-content:center;padding:40px 24px;overflow-y:auto}
-.modal{background:var(--surf);border:1px solid rgba(255,255,255,.13);border-radius:12px;padding:32px 28px;max-width:520px;width:100%;animation:fadeUp .3s ease;margin:auto}
-.divider{height:1px;background:var(--dim)}
-.am-chip{background:var(--amdim);border:1px solid var(--ambdr);border-radius:7px;padding:8px 12px}
-.stat-box{background:rgba(0,0,0,.2);border-radius:6px;padding:7px 9px;text-align:center}
-.ppill{padding:5px 12px;border-radius:20px;background:transparent;border:1px solid var(--bd);color:var(--mt);font-size:12px;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:6px}
-.ppill.on{background:var(--amdim);border-color:var(--ambdr);color:var(--am)}
-.av{border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:500;color:#fff;flex-shrink:0}
-.tp{padding:11px 12px;border-radius:8px;background:var(--surf);border:1px solid var(--bd);cursor:pointer;margin-bottom:7px}
-.tp.on{background:var(--amdim);border-color:var(--ambdr)}
-.prog-bg{height:3px;background:var(--dim);border-radius:2px;overflow:hidden}
-.prog-fill{height:100%;background:#4ade80;border-radius:2px;transition:width .3s}
-.next-card{background:var(--amdim);border:1px solid var(--ambdr);border-radius:10px;padding:16px 18px}
-.msg-body{padding:11px 13px;background:rgba(0,0,0,.3);border:1px solid var(--bd);border-radius:7px;font-size:13px;line-height:1.85;white-space:pre-wrap;color:var(--tx);max-height:160px;overflow-y:auto}
-.tl-item{display:flex;gap:0}
-.tl-spine{display:flex;flex-direction:column;align-items:center;width:32px;flex-shrink:0}
-.cb{width:18px;height:18px;border-radius:4px;border:1px solid var(--mt);background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:12px}
-.cb.done{background:#4ade80;border-color:#4ade80}
-.tl-line{width:1px;flex:1;min-height:16px}
-.tl-body{flex:1;padding-bottom:14px;padding-left:10px}
-.tl-hdr{display:flex;align-items:center;gap:8px;padding-top:10px;margin-bottom:6px}
-.step-btn{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:7px;background:transparent;border:1px solid var(--bd);color:var(--tx);cursor:pointer;text-align:left;font-family:inherit;width:100%;margin-bottom:3px}
-.gen-btn{width:100%;padding:14px;border-radius:9px;background:var(--am);border:none;color:#0a0a08;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;letter-spacing:1px;display:flex;align-items:center;justify-content:center;gap:10px}
-.gen-btn:disabled{background:rgba(255,255,255,.06);color:var(--mt);cursor:not-allowed}
-`;
-
 function Fld({label,value,onChange,ph,ta}){
   return <div><label className="fl">{label}</label>{ta?<textarea className="ta" value={value} onChange={onChange} placeholder={ph} rows={3}/>:<input className="fi" value={value} onChange={onChange} placeholder={ph}/>}</div>;
 }
 function AB({onClick,children,loading,disabled,color,sm,style}){
   const p=sm?"6px 12px":"9px 17px";const fs=sm?11:12;
-  return <button className="abtn" onClick={onClick} disabled={disabled||loading} style={{padding:p,background:`${color}18`,border:`1px solid ${color}35`,color,fontSize:fs,opacity:disabled||loading?.4:1,...style}}>{loading&&<span className="spin"/>}{children}</button>;
+  return <button className="abtn" onClick={onClick} disabled={disabled||loading} style={{padding:p,background:`${color}18`,border:`1px solid ${color}35`,color,fontSize:fs,opacity:(disabled||loading)?0.4:1,...style}}>{loading&&<span className="spin"/>}{children}</button>;
 }
 function QBox({query,copied,onCopy,color}){
   return <div className="qbox" style={{borderColor:color+"25"}}><div style={{fontSize:9,color,textTransform:"uppercase",letterSpacing:"2px",marginBottom:6}}>SEARCH QUERY</div><div style={{fontFamily:"'DM Mono',monospace",fontSize:12,color:"#e8e3d8",lineHeight:1.6,marginBottom:8}}>{query}</div><div className="row gap8"><button className={`cpbtn${copied?" ok":""}`} onClick={onCopy}>{copied?"COPIED":"COPY"}</button><a href={`https://www.google.com/search?q=${encodeURIComponent(query)}`} target="_blank" rel="noreferrer" style={{padding:"4px 10px",borderRadius:6,background:color+"10",border:`1px solid ${color}25`,color,fontSize:10,textDecoration:"none",fontWeight:500}}>OPEN IN GOOGLE</a></div></div>;
@@ -207,6 +143,7 @@ function ICard({ca,items}){
 }
 
 export default function Home(){
+  const mounted = useIsMounted();
   const [view,setView]=useState("home");
   const [resTab,setResTab]=useState("company");
   const [seqTab,setSeqTab]=useState("build");
@@ -245,9 +182,15 @@ export default function Home(){
   const [loadingTQ,setLoadingTQ]=useState(false);
   const [tqCopied,setTqCopied]=useState(false);
   const [geminiKey,setGeminiKey]=useState("");
-  const [geminiInput,setGeminiInput]=useState("AIzaSyAgmyAkCaHG9z0YFYV8xdZG7vTY17tUfsE");
+  const [geminiInput,setGeminiInput]=useState("");
   const [autoResearchingCo,setAutoResearchingCo]=useState(false);
-  const [autoResearchingPr,setAutoResearchingPr]=useState(false);
+  const [humanizingStep,setHumanizingStep]=useState(null);
+  const [bobiTab,setBobiTab]=useState("accounts");
+  const [bobiStageFilter,setBobiStageFilter]=useState("all");
+  const [bobiSearch,setBobiSearch]=useState("");
+  const [bobiDetailId,setBobiDetailId]=useState(null);
+  const [seqViewMode,setSeqViewMode]=useState("type");
+  const [seqTypeFilter,setSeqTypeFilter]=useState("all");
 
   const ref=useRef({});
   ref.current={co,coIntel,prospects,acctStatus,acctNotes};
@@ -258,11 +201,6 @@ export default function Home(){
       if(s){setSeller(s);setProfileDone(true);}else setShowProfile(true);
       const gk=await sGet("gw-gemini-key");
       if(gk){setGeminiKey(gk);setGeminiInput(gk);}
-      else{
-        const defaultKey="AIzaSyAgmyAkCaHG9z0YFYV8xdZG7vTY17tUfsE";
-        await sSet("gw-gemini-key",defaultKey);
-        setGeminiKey(defaultKey);setGeminiInput(defaultKey);
-      }
       await reload();
     })();
   },[]);
@@ -333,7 +271,7 @@ export default function Home(){
     if(!co.name){setErr("Enter company name.");return;}
     setErr("");setLoadingCQ(true);
     try{const d=await ai(Q_CO(seller),`Company:${co.name},Industry:${co.industry}`);setCoQuery(d.query);}
-    catch{setErr("Failed — try again.");}
+    catch(e){setErr(e?.message||"Failed — try again.");}
     setLoadingCQ(false);
   };
 
@@ -347,7 +285,7 @@ export default function Home(){
         `Company:${co.name}, Industry:${industry}`
       );
       setTrendQuery(d.query);
-    }catch{setErr("Failed — try again.");}
+    }catch(e){setErr(e?.message||"Failed — try again.");}
     setLoadingTQ(false);
   };
 
@@ -355,7 +293,7 @@ export default function Home(){
     if(!coPasted.trim()){setErr("Paste research first.");return;}
     setErr("");setAnalyzingCo(true);
     try{const d=await ai(S_CI+`\nSeller:"${seller.problemSolved}" ICP:"${seller.icp}"`,`Company:${co.name}\n\n${coPasted}`);setCoIntel(d);}
-    catch{setErr("Analysis failed.");}
+    catch(e){setErr(e?.message||"Analysis failed.");}
     setAnalyzingCo(false);
   };
 
@@ -372,7 +310,7 @@ export default function Home(){
   const getPrQ=async(i)=>{
     upP(i,"loadingQ",true);setErr("");
     try{const d=await ai(Q_CO(seller),`${prospects[i].firstName} ${prospects[i].lastName},${prospects[i].title} at ${co.name}`);upP(i,"query",d.query);}
-    catch{setErr("Failed.");}
+    catch(e){setErr(e?.message||"Failed.");}
     upP(i,"loadingQ",false);
   };
 
@@ -380,7 +318,7 @@ export default function Home(){
     const p=prospects[i];if(!p.pasted.trim()){setErr("Paste research first.");return;}
     upP(i,"analyzing",true);setErr("");
     try{const d=await ai(S_PI+`\nSeller:"${seller.problemSolved}"`,`${p.firstName} ${p.lastName},${p.title}\n\n${p.pasted}`);upP(i,"intel",d);}
-    catch{setErr("Failed.");}
+    catch(e){setErr(e?.message||"Failed.");}
     upP(i,"analyzing",false);
   };
 
@@ -390,10 +328,10 @@ export default function Home(){
     const per=PERSONAS.find(x=>x.id===p.personaId)||PERSONAS[0];
     upP(pi,"generating",true);setErr("");
     try{
-      const intel=p.intel?`\nCompany:${coIntel?.snapshot||""}\nAngle:${p.intel.angle}\nPain:${p.intel.pain?.join("; ")||""}`:"";
+      const intel=p.intel?`\nCompany:${coIntel?.snapshot||""}\nAngle:${p.intel.angle}\nPain:${p.intel.pain?.join("; ")||""}`:""
       const d=await ai(S_SEQ(st,per),`Prospect:${p.firstName} ${p.lastName},${p.title} at ${co.name}\nPain:${p.intel?.pain?.join("; ")||coIntel?.buyingSignals||""}\nValue:${seller.valueprop||seller.problemSolved}\nProof:${seller.socialProof}\nSender:${seller.yourName},${seller.yourTitle} at ${seller.yourCompany}${intel}`);
       upP(pi,"sequence",d);upP(pi,"seqStartDate",ts());
-    }catch{setErr("Generation failed.");}
+    }catch(e){setErr(e?.message||"Generation failed.");}
     upP(pi,"generating",false);
   };
 
@@ -411,7 +349,7 @@ export default function Home(){
       const ex=seqType.id==="referral"?`\nReferral:${seqForm.referralName}`:seqType.id==="postmeeting"?`\nMeeting:${seqForm.meetingNotes}`:seqType.id==="inbound"?`\nDownloaded:${seqForm.downloadedContent}`:"";
       const d=await ai(S_SEQ(seqType,persona),`Prospect:${seqForm.firstName} ${seqForm.lastName},${seqForm.title} at ${seqForm.company}(${seqForm.industry})\nPain:${seqForm.painPoint}\nValue:${seqForm.valueprop}\nProof:${seqForm.socialProof}\nSender:${seller.yourName},${seller.yourTitle} at ${seller.yourCompany}${ex}${seqIntel?"\nIntel:\n"+seqIntel:""}`);
       setGenerated(d);setActiveStep(seqType.steps[0]);setSeqTab("results");
-    }catch{setErr("Generation failed.");}
+    }catch(e){setErr(e?.message||"Generation failed.");}
     setGenerating(false);
   };
 
@@ -439,6 +377,20 @@ export default function Home(){
   const totalT=p=>(SEQ_TYPES.find(t=>t.id===p.seqTypeId)||SEQ_TYPES[0]).steps.length;
   const cp=(text,id)=>{navigator.clipboard.writeText(text);setCopied(id);setTimeout(()=>setCopied(""),2000);};
 
+  const humanizeStep=async(sid)=>{
+    const c=generated[sid];if(!c?.body){setErr("No message to humanize.");return;}
+    setErr("");setHumanizingStep(sid);
+    try{
+      const r=await fetch("/api/claude",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1024,system:"Rewrite the following sales message to sound more natural and human, less templated or robotic. Keep the same intent and length. If a subject line is provided, return JSON: {\"subject\":\"...\",\"body\":\"...\"}. Otherwise return JSON: {\"body\":\"...\"}. Return only that JSON, no other text.",messages:[{role:"user",content:(c.subject?`Subject: ${c.subject}\n\n`:"")+c.body}]})});
+      const d=await r.json();
+      if(!r.ok||d.error) throw new Error(d.error?.message||d.message||"Humanize failed");
+      const t=(d.content||[]).map(b=>b.text||"").join("");
+      const out=parseJsonFromText(t);
+      setGenerated(prev=>({...prev,[sid]:{subject:out.subject??prev[sid]?.subject??"",body:out.body||prev[sid]?.body||""}}));
+    }catch(e){setErr(e?.message||"Humanize failed.");}
+    setHumanizingStep(null);
+  };
+
   const saveSeller=async()=>{
     if(!seller.problemSolved||!seller.icp){setErr("Fill in Problem Solved and ICP.");return;}
     await sSet("gw-seller",seller);setProfileDone(true);setShowProfile(false);setErr("");
@@ -447,6 +399,7 @@ export default function Home(){
   const ap=activePi!==null?prospects[activePi]:null;
   const tp=trackerPi!==null?prospects[trackerPi]:null;
   const acSt=STATUSES.find(s=>s.id===acctStatus)||STATUSES[0];
+  if(!mounted) return <div style={{minHeight:"100vh",background:"#0a0a08"}}/>;
 
   const extCfg={
     referral:{label:"Referred by",ph:"John Smith, VP at PartnerCo",key:"referralName"},
@@ -457,16 +410,105 @@ export default function Home(){
   const navs=[
     {id:"home",    icon:"◆",label:"Home"},
     {id:"settings",icon:"⚙",label:"Settings", badge:!geminiKey?"!":null,bc:"#f87171"},
-    {id:"accounts",icon:"⊞",label:"Accounts", badge:accounts.length||null,bc:"#4ade80"},
+    {id:"bobi",icon:"⊞",label:"BoBi", badge:accounts.length||null,bc:"#4ade80"},
     {id:"research",icon:"◎",label:"Research",  badge:coIntel?"✓":null,bc:"#60a5fa"},
     {id:"tracker", icon:"▤",label:"Tracker",   badge:prospects.filter(p=>p.sequence).length||null,bc:"#f0a500"},
     {id:"sequence",icon:"⟡",label:"Sequence",  badge:generated?"✓":null,bc:"#f0a500"},
   ];
 
+  const stageCfg = {
+    Prospecting:{color:"#64748b",bg:"rgba(100,116,139,.12)"},
+    Discovery:{color:"#1d4ed8",bg:"rgba(29,78,216,.12)"},
+    Proposal:{color:"#b45309",bg:"rgba(180,83,9,.12)"},
+    Negotiation:{color:"#6d28d9",bg:"rgba(109,40,217,.12)"},
+    "Closed Won":{color:"#15803d",bg:"rgba(21,128,61,.12)"},
+    "Closed Lost":{color:"#b91c1c",bg:"rgba(185,28,28,.12)"},
+  };
+  const stageOrder = ["Prospecting","Discovery","Proposal","Negotiation","Closed Won","Closed Lost"];
+  const bobiAccounts = accounts.map(a=>({
+    ...a,
+    stage: a.stage || "Prospecting",
+    timing: a.coIntel?.timingScore || "Cold",
+    revenue: Number(a.revenue || 0),
+    region: a.region || "NA",
+    inPipeline: !["Closed Won","Closed Lost"].includes(a.stage || "Prospecting"),
+    stale: (Date.now()-new Date(a.updatedAt||Date.now()).getTime()) > 1000*60*60*24*30,
+  }));
+  const filteredBoBi = bobiAccounts.filter(a=>{
+    const byStage = bobiStageFilter==="all" || a.stage===bobiStageFilter;
+    const q=bobiSearch.trim().toLowerCase();
+    const bySearch=!q||`${a.co?.name||""} ${a.co?.industry||""} ${a.region}`.toLowerCase().includes(q);
+    return byStage && bySearch;
+  });
+  const totalRevenue = bobiAccounts.reduce((n,a)=>n+a.revenue,0);
+  const selectedBoBi = bobiAccounts.find(a=>a.id===bobiDetailId) || null;
+
+  function buildBoBi(){
+    const pipeline = bobiAccounts.filter(a=>a.inPipeline);
+    const hot = bobiAccounts.filter(a=>a.timing==="Hot");
+    const stale = bobiAccounts.filter(a=>a.stale);
+    const byStageCount = stage => bobiAccounts.filter(a=>a.stage===stage);
+    const tabBtn = (id,label)=><button className={`ppill${bobiTab===id?" on":""}`} onClick={()=>setBobiTab(id)}>{label}</button>;
+    return (
+      <div className="fade">
+        <div className="between mb16">
+          <div><div className="eyebrow">BOOK OF BUSINESS</div><h2 className="serif" style={{fontSize:26,fontWeight:500}}>BoBi</h2></div>
+          <div className="row gap8"><button className="cpbtn" onClick={()=>window.alert("CSV/Excel upload coming next.")}>Upload CSV/Excel</button><button className="cpbtn pri" onClick={()=>setView("research")}>+ Add Account</button></div>
+        </div>
+        <div className="row gap8 wrap-row mb12">
+          <div className="stat-box"><div style={{fontSize:16,fontWeight:700}}>{bobiAccounts.length}</div><div style={{fontSize:9,color:"#78716c"}}>Total Accounts</div></div>
+          <div className="stat-box"><div style={{fontSize:16,fontWeight:700}}>{pipeline.length}</div><div style={{fontSize:9,color:"#78716c"}}>In Pipeline</div></div>
+          <div className="stat-box"><div style={{fontSize:16,fontWeight:700,color:"#ef4444"}}>{hot.length}</div><div style={{fontSize:9,color:"#78716c"}}>Hot Timing</div></div>
+          <div className="stat-box"><div style={{fontSize:16,fontWeight:700,color:"#b45309"}}>{stale.length}</div><div style={{fontSize:9,color:"#78716c"}}>Stale</div></div>
+          <div className="stat-box"><div style={{fontSize:16,fontWeight:700}}>${totalRevenue.toLocaleString()}</div><div style={{fontSize:9,color:"#78716c"}}>Total Revenue</div></div>
+        </div>
+        <div className="row gap8 wrap-row mb12">
+          {tabBtn("accounts","Accounts Table")}
+          {tabBtn("opps","Opportunities")}
+          {tabBtn("pipeline","Pipeline")}
+          {tabBtn("segments","Segments")}
+        </div>
+
+        {bobiTab==="accounts"&&<div className="box">
+          <div className="between mb10">
+            <div className="row gap6 wrap-row">{["all",...stageOrder].map(s=>{const cfg=stageCfg[s]||{color:"#6b7280",bg:"rgba(107,114,128,.12)"};return <button key={s} className={`ppill${bobiStageFilter===s?" on":""}`} onClick={()=>setBobiStageFilter(s)} style={{background:bobiStageFilter===s?cfg.bg:"transparent",borderColor:cfg.color,color:cfg.color}}>{s==="all"?"All Stages":s}</button>;})}</div>
+            <input className="fi" style={{maxWidth:240}} placeholder="Search accounts..." value={bobiSearch} onChange={e=>setBobiSearch(e.target.value)} />
+          </div>
+          <div style={{overflowX:"auto"}}>
+            <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+              <thead><tr style={{textAlign:"left",color:"#78716c"}}><th>Company</th><th>Industry</th><th>Region</th><th>Revenue</th><th>Stage</th><th>Timing</th><th>Prospects</th><th>Intel</th></tr></thead>
+              <tbody>{filteredBoBi.map(a=>{const cfg=stageCfg[a.stage]||stageCfg.Prospecting;return <tr key={a.id} onClick={()=>setBobiDetailId(a.id)} style={{cursor:"pointer",borderTop:"1px solid #e7e5e4"}}><td style={{padding:"8px 0"}}>{a.co?.name||"—"}</td><td>{a.co?.industry||"—"}</td><td>{a.region}</td><td>${a.revenue.toLocaleString()}</td><td><span className="tag" style={{background:cfg.bg,color:cfg.color}}>{a.stage}</span></td><td>{a.timing}</td><td>{a.prospects?.length||0}</td><td>{a.coIntel?"✓":"—"}</td></tr>;})}</tbody>
+            </table>
+          </div>
+        </div>}
+
+        {bobiTab==="opps"&&<div className="g2">
+          <div className="box"><div className="lbl">Hot Accounts</div>{hot.filter(a=>a.inPipeline).map(a=><div key={a.id} className="tp"><div className="between"><strong>{a.co?.name}</strong><span>${a.revenue.toLocaleString()}</span></div><div style={{fontSize:11,color:"#78716c"}}>{a.co?.industry||"—"} · {a.stage}</div></div>)}</div>
+          <div className="box"><div className="lbl">Stale Accounts</div>{stale.map(a=><div key={a.id} className="tp"><div className="between"><strong>{a.co?.name}</strong><span className="tag" style={{background:"rgba(239,68,68,.12)",color:"#b91c1c"}}>Re-engage</span></div><div style={{fontSize:11,color:"#78716c"}}>30+ days no activity</div></div>)}</div>
+        </div>}
+
+        {bobiTab==="pipeline"&&<div className="g3">{stageOrder.map(stage=>{const rows=byStageCount(stage);return <div key={stage} className="box"><div className="between mb8"><strong>{stage}</strong><span style={{fontSize:11,color:"#78716c"}}>{rows.length} · ${rows.reduce((n,a)=>n+a.revenue,0).toLocaleString()}</span></div>{rows.map(a=><div key={a.id} className="tp"><div style={{fontWeight:600}}>{a.co?.name}</div><div className="between"><span style={{fontSize:11,color:"#78716c"}}>${a.revenue.toLocaleString()}</span><span className="tag" style={{background:a.timing==="Hot"?"rgba(239,68,68,.12)":"rgba(245,158,11,.12)",color:a.timing==="Hot"?"#b91c1c":"#b45309"}}>{a.timing}</span></div></div>)}</div>;})}</div>}
+
+        {bobiTab==="segments"&&<div className="g2">
+          <div className="box"><div className="lbl">By Industry</div>{Object.entries(bobiAccounts.reduce((m,a)=>{const k=a.co?.industry||"Unknown";m[k]=(m[k]||0)+1;return m;},{})).map(([k,v])=><div key={k} className="between mb8"><span>{k}</span><div style={{display:"flex",alignItems:"center",gap:8}}><div style={{width:120,height:6,background:"#e7e5e4",borderRadius:4}}><div style={{height:"100%",width:`${Math.min(100,v*15)}%`,background:"#d97706",borderRadius:4}}/></div><span>{v}</span></div></div>)}</div>
+          <div className="box"><div className="lbl">By Stage</div>{stageOrder.map(s=>{const count=byStageCount(s).length;const rev=byStageCount(s).reduce((n,a)=>n+a.revenue,0);return <div key={s} className="between mb8"><span>{s}</span><span>{count} · ${rev.toLocaleString()}</span></div>;})}</div>
+        </div>}
+
+        {selectedBoBi&&<div style={{position:"fixed",top:0,right:0,width:420,maxWidth:"92vw",height:"100vh",background:"#fff",borderLeft:"1px solid #e7e5e4",padding:20,overflowY:"auto",zIndex:500}}>
+          <div className="between mb10"><h3 className="serif" style={{fontSize:22}}>{selectedBoBi.co?.name}</h3><button className="cpbtn" onClick={()=>setBobiDetailId(null)}>Close</button></div>
+          <div className="row gap8 mb10"><span className="tag" style={{background:(stageCfg[selectedBoBi.stage]||stageCfg.Prospecting).bg,color:(stageCfg[selectedBoBi.stage]||stageCfg.Prospecting).color}}>{selectedBoBi.stage}</span><span className="tag" style={{background:"rgba(245,158,11,.12)",color:"#b45309"}}>{selectedBoBi.timing}</span><span className="tag">${selectedBoBi.revenue.toLocaleString()}</span></div>
+          <div className="box mb10"><div className="lbl">Deal Info</div><div style={{fontSize:12,lineHeight:1.8}}>Industry: {selectedBoBi.co?.industry||"—"}<br/>Region: {selectedBoBi.region}<br/>Website: {selectedBoBi.co?.website||"—"}<br/>Prospects: {selectedBoBi.prospects?.length||0}</div></div>
+          <div className="box mb10"><div className="lbl">Deal Stage</div><select value={selectedBoBi.stage} onChange={e=>patchAcct(selectedBoBi.id,"stage",e.target.value)} className="fi">{stageOrder.map(s=><option key={s}>{s}</option>)}</select></div>
+          <div className="box mb10"><div className="lbl">Account Snapshot</div><p style={{fontSize:12,color:"#57534e"}}>{selectedBoBi.coIntel?.snapshot||"No snapshot yet."}</p></div>
+          <div className="box mb10"><div className="lbl">Prospects</div>{(selectedBoBi.prospects||[]).length?selectedBoBi.prospects.map((p,i)=><div key={i} className="tp">{p.firstName} {p.lastName} · {p.title}</div>):<p style={{fontSize:12,color:"#78716c"}}>No prospects added.</p>}</div>
+          <div className="box"><div className="lbl">Activity Log</div><p style={{fontSize:12,color:"#78716c"}}>Updated {fmt(selectedBoBi.updatedAt)}</p></div>
+        </div>}
+      </div>
+    );
+  }
+
   return(
     <div className="app">
-      <style>{CSS}</style>
-
       {showProfile&&(
         <div className="modal-bg">
           <div className="modal">
@@ -495,11 +537,11 @@ export default function Home(){
               {profileDone&&<button onClick={()=>{setShowProfile(false);setErr("");}} style={{padding:"12px 16px",borderRadius:8,background:"transparent",border:"1px solid rgba(255,255,255,.07)",color:"#5a5850",cursor:"pointer",fontFamily:"inherit",fontSize:13}}>Cancel</button>}
             </div>
           </div>
-        </div>
-      )}
+            </div>
+          )}
 
       <div className="sb">
-        <div className="sb-logo"><div className="sb-name">Groundwork</div><div className="sb-tag">Sales Intelligence</div></div>
+        <div className="sb-logo"><div className="row gap8" style={{marginBottom:6}}><div style={{width:18,height:18,borderRadius:4,background:"#d97706",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:10,fontWeight:700}}>◆</div><div className="sb-name" style={{marginBottom:0}}>Groundwork</div></div><div className="sb-tag">Sales Intelligence</div></div>
         <div className="nav">
           {navs.map(n=>(
             <div key={n.id} className={`ni${view===n.id?" on":""}`} onClick={()=>setView(n.id)}>
@@ -508,13 +550,13 @@ export default function Home(){
               {n.badge!=null&&<span className="tag" style={{background:`${n.bc}18`,color:n.bc,fontSize:9}}>{n.badge}</span>}
             </div>
           ))}
-          {view==="research"&&<div className="snav">{["company","prospects","brief"].map(t=><div key={t} className={`sni${resTab===t?" on":""}`} onClick={()=>setResTab(t)}>{t.charAt(0).toUpperCase()+t.slice(1)}</div>)}</div>}
-          {view==="sequence"&&<div className="snav">{["build","results"].map(t=><div key={t} className={`sni${seqTab===t?" on":""}`} onClick={()=>{if(t==="results"&&!generated)return;setSeqTab(t);}} style={{opacity:t==="results"&&!generated?.35:1}}>{t.charAt(0).toUpperCase()+t.slice(1)}</div>)}</div>}
+          
+          {view==="sequence"&&<div className="snav">{["build","results"].map(t=><div key={t} className={`sni${seqTab===t?" on":""}`} onClick={()=>setSeqTab(t)}>{t.charAt(0).toUpperCase()+t.slice(1)}</div>)}</div>}
           {view==="tracker"&&prospects.length>0&&<div className="snav">{prospects.map((p,i)=><div key={i} className={`sni${trackerPi===i?" on":""}`} onClick={()=>setTrackerPi(i)}><div className="av" style={{width:16,height:16,fontSize:8,background:`hsl(${i*55+180},50%,40%)`}}>{p.firstName[0]}</div><span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.firstName} {p.lastName}</span>{p.sequence&&<span style={{marginLeft:"auto",fontSize:9,color:"#4ade80",flexShrink:0}}>{doneCount(p)}/{totalT(p)}</span>}</div>)}</div>}
         </div>
         <div className="sb-bot">
-          {co.name&&<div className="sb-card"><div style={{fontSize:9,color:"#5a5850",letterSpacing:"2px",textTransform:"uppercase",marginBottom:3}}>Active Account</div><div style={{fontSize:12,fontWeight:500,marginBottom:3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{co.name}</div><div className="row gap6"><span className="tag" style={{background:`${acSt.color}18`,color:acSt.color,fontSize:9}}>{acSt.label}</span>{savedMsg&&<span style={{fontSize:9,color:"#4ade80"}}>{savedMsg}</span>}</div></div>}
-          {profileDone?<div className="sb-card"><div className="between mb8"><span style={{fontSize:9,color:"#f0a500",letterSpacing:"2px",textTransform:"uppercase"}}>Profile</span><button onClick={()=>setShowProfile(true)} style={{fontSize:9,color:"#5a5850",background:"none",border:"none",cursor:"pointer",fontFamily:"inherit"}}>EDIT</button></div><div style={{fontSize:11,lineHeight:1.5,marginBottom:2}}>{seller.problemSolved.slice(0,44)}{seller.problemSolved.length>44?"...":""}</div><div style={{fontSize:10,color:"#5a5850"}}>ICP: {seller.icp.slice(0,34)}{seller.icp.length>34?"...":""}</div></div>:<button onClick={()=>setShowProfile(true)} style={{width:"100%",padding:"8px",borderRadius:7,background:"rgba(248,113,113,.08)",border:"1px solid rgba(248,113,113,.2)",color:"#f87171",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>SET UP PROFILE</button>}
+          {co.name&&<div className="sb-card"><div style={{fontSize:9,color:"#cbd5e1",letterSpacing:"2px",textTransform:"uppercase",marginBottom:3}}>Active Account</div><div style={{fontSize:12,fontWeight:500,marginBottom:3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",color:"#fff"}}>{co.name}</div><div className="row gap6"><span className="tag" style={{background:`${acSt.color}18`,color:acSt.color,fontSize:9}}>{acSt.label}</span>{savedMsg&&<span style={{fontSize:9,color:"#86efac"}}>{savedMsg}</span>}</div></div>}
+          {profileDone?<div className="sb-card"><div className="between mb8"><span style={{fontSize:9,color:"#fbbf24",letterSpacing:"2px",textTransform:"uppercase"}}>Profile</span><button onClick={()=>setShowProfile(true)} style={{fontSize:9,color:"#cbd5e1",background:"none",border:"none",cursor:"pointer",fontFamily:"inherit"}}>EDIT</button></div><div style={{fontSize:11,lineHeight:1.5,marginBottom:2,color:"#e2e8f0"}}>{seller.problemSolved.slice(0,44)}{seller.problemSolved.length>44?"...":""}</div><div style={{fontSize:10,color:"#cbd5e1"}}>ICP: {seller.icp.slice(0,34)}{seller.icp.length>34?"...":""}</div></div>:<button onClick={()=>setShowProfile(true)} style={{width:"100%",padding:"8px",borderRadius:7,background:"rgba(248,113,113,.12)",border:"1px solid rgba(248,113,113,.3)",color:"#fecaca",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>SET UP PROFILE</button>}
         </div>
       </div>
 
@@ -529,223 +571,158 @@ export default function Home(){
                 <p style={{fontSize:13,color:"#5a5850",maxWidth:420,lineHeight:1.9}}>Research accounts. Profile stakeholders. Generate personalized sequences. Track every touch. The deal is won before the first message.</p>
               </div>
               {profileDone&&<div className="am-chip row gap12 mb20"><div style={{fontSize:11,color:"#f0a500",textTransform:"uppercase",letterSpacing:"2px"}}>◆</div><div style={{flex:1}}><div style={{fontSize:11,color:"#f0a500",letterSpacing:"1.5px",textTransform:"uppercase",marginBottom:2}}>{seller.yourName||"You"} · {seller.yourCompany}</div><div style={{fontSize:13}}>{seller.problemSolved}</div></div><button onClick={()=>setShowProfile(true)} style={{padding:"5px 10px",borderRadius:6,background:"transparent",border:"1px solid rgba(255,255,255,.07)",color:"#5a5850",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>EDIT</button></div>}
-              <div className="g4">{[{id:"accounts",icon:"⊞",label:"Accounts",desc:`${accounts.length} saved`,c:"#4ade80"},{id:"research",icon:"◎",label:"Research Hub",desc:"Companies + stakeholders",c:"#60a5fa"},{id:"tracker",icon:"▤",label:"Sequence Tracker",desc:"Track & execute touches",c:"#f0a500"},{id:"sequence",icon:"⟡",label:"SequenceAI",desc:"Generate sequences",c:"#f0a500"}].map(h=><div key={h.id} onClick={()=>setView(h.id)} className="box" style={{cursor:"pointer",transition:"all .18s"}} onMouseEnter={e=>{e.currentTarget.style.borderColor=h.c+"50";e.currentTarget.style.transform="translateY(-2px)";}} onMouseLeave={e=>{e.currentTarget.style.borderColor="rgba(255,255,255,.07)";e.currentTarget.style.transform="none";}}><div style={{fontSize:20,marginBottom:10,color:h.c}}>{h.icon}</div><div style={{fontSize:13,fontWeight:500,marginBottom:4}}>{h.label}</div><div style={{fontSize:11,color:"#5a5850",lineHeight:1.5}}>{h.desc}</div></div>)}</div>
+              <div className="g4">{[{id:"bobi",icon:"⊞",label:"BoBi",desc:`${accounts.length} accounts`,c:"#4ade80"},{id:"research",icon:"◎",label:"Research Hub",desc:"Companies + stakeholders",c:"#60a5fa"},{id:"tracker",icon:"▤",label:"Sequence Tracker",desc:"Track & execute touches",c:"#f0a500"},{id:"sequence",icon:"⟡",label:"SequenceAI",desc:"Generate sequences",c:"#f0a500"}].map(h=><div key={h.id} onClick={()=>setView(h.id)} className="box" style={{cursor:"pointer",transition:"all .18s"}} onMouseEnter={e=>{e.currentTarget.style.borderColor=h.c+"50";e.currentTarget.style.transform="translateY(-2px)";}} onMouseLeave={e=>{e.currentTarget.style.borderColor="rgba(255,255,255,.07)";e.currentTarget.style.transform="none";}}><div style={{fontSize:20,marginBottom:10,color:h.c}}>{h.icon}</div><div style={{fontSize:13,fontWeight:500,marginBottom:4}}>{h.label}</div><div style={{fontSize:11,color:"#5a5850",lineHeight:1.5}}>{h.desc}</div></div>)}</div>
             </div>
           )}
 
-          {view==="accounts"&&(
-            <div className="fade">
-              <div className="between mb24"><div><div className="eyebrow">SAVED ACCOUNTS</div><h2 className="serif" style={{fontSize:26,fontWeight:400,letterSpacing:"-.5px"}}>{accounts.length} Account{accounts.length!==1?"s":""}</h2></div><button onClick={()=>{setCo({name:"",industry:"",website:""});setCoIntel(null);setProspects([]);setActivePi(null);setAcctStatus("researching");setAcctNotes("");setView("research");setResTab("company");}} style={{padding:"7px 14px",borderRadius:7,background:"#f0a500",border:"none",color:"#0a0a08",fontSize:11,fontWeight:500,cursor:"pointer",fontFamily:"inherit",letterSpacing:".5px"}}>+ NEW ACCOUNT</button></div>
-              {accounts.length===0&&<div style={{textAlign:"center",padding:"56px 20px",color:"#5a5850"}}><div style={{fontSize:36,marginBottom:14,opacity:.3}}>⊞</div><p style={{fontSize:13,marginBottom:16}}>No accounts yet.</p><button onClick={()=>setView("research")} style={{padding:"9px 20px",borderRadius:7,background:"rgba(240,165,0,.12)",border:"1px solid rgba(240,165,0,.28)",color:"#f0a500",fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>Research First Account</button></div>}
-              {accounts.length>0&&<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(270px,1fr))",gap:12}}>{accounts.map(a=>{const st=STATUSES.find(s=>s.id===a.status)||STATUSES[0];const np=a.prospects?.length||0;const ni=a.prospects?.filter(p=>p.intel).length||0;const ns=a.prospects?.filter(p=>p.sequence).length||0;return(<div key={a.id} className="box" style={{cursor:"pointer",transition:"border-color .18s"}} onClick={()=>loadAcct(a)} onMouseEnter={e=>e.currentTarget.style.borderColor="rgba(240,165,0,.4)"} onMouseLeave={e=>e.currentTarget.style.borderColor="rgba(255,255,255,.07)"}><div className="between mb10"><div style={{flex:1,minWidth:0}}><div className="serif" style={{fontSize:16,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.co?.name}</div><div style={{fontSize:11,color:"#5a5850"}}>{a.co?.industry||"—"}</div></div><button onClick={e=>delAcct(a.id,e)} style={{background:"none",border:"none",color:"#5a5850",cursor:"pointer",fontSize:13,padding:"2px 5px",flexShrink:0}}>✕</button></div><div className="g4 mb10"><div className="stat-box"><div style={{fontSize:15,fontWeight:600,color:a.coIntel?.timingScore==="Hot"?"#f87171":a.coIntel?.timingScore==="Warm"?"#f0a500":"#5a5850",marginBottom:2}}>{a.coIntel?.timingScore||"—"}</div><div style={{fontSize:8,color:"#5a5850",textTransform:"uppercase",letterSpacing:"1.5px"}}>TIMING</div></div><div className="stat-box"><div style={{fontSize:15,fontWeight:600,color:"#60a5fa",marginBottom:2}}>{np}</div><div style={{fontSize:8,color:"#5a5850",textTransform:"uppercase",letterSpacing:"1.5px"}}>PROSPECTS</div></div><div className="stat-box"><div style={{fontSize:15,fontWeight:600,color:"#4ade80",marginBottom:2}}>{ni}</div><div style={{fontSize:8,color:"#5a5850",textTransform:"uppercase",letterSpacing:"1.5px"}}>PROFILED</div></div><div className="stat-box"><div style={{fontSize:15,fontWeight:600,color:"#f0a500",marginBottom:2}}>{ns}</div><div style={{fontSize:8,color:"#5a5850",textTransform:"uppercase",letterSpacing:"1.5px"}}>IN SEQ</div></div></div><div className="row gap8 mb8"><select value={a.status||"researching"} onClick={e=>e.stopPropagation()} onChange={e=>{e.stopPropagation();patchAcct(a.id,"status",e.target.value);}} style={{flex:1,padding:"5px 8px",borderRadius:6,background:`${st.color}12`,border:`1px solid ${st.color}30`,color:st.color,fontSize:11,fontFamily:"inherit"}}>{STATUSES.map(s=><option key={s.id} value={s.id}>{s.label}</option>)}</select><span style={{fontSize:10,color:"#5a5850",flexShrink:0}}>{fmt(a.updatedAt)}</span></div><textarea value={a.notes||""} onClick={e=>e.stopPropagation()} onChange={e=>{e.stopPropagation();patchAcct(a.id,"notes",e.target.value);}} placeholder="Notes..." rows={2} style={{width:"100%",padding:"6px 9px",borderRadius:6,background:"rgba(0,0,0,.2)",border:"1px solid rgba(255,255,255,.07)",color:"#5a5850",fontSize:11,fontFamily:"inherit",resize:"none",lineHeight:1.5}}/><div style={{marginTop:9,fontSize:11,color:"#f0a500",letterSpacing:".5px"}}>OPEN & RESUME →</div></div>);})}</div>}
-            </div>
-          )}
+          {view==="bobi"&&buildBoBi()}
 
           {view==="research"&&(
             <div className="fade">
-              {resTab==="company"&&(
-                <>
-                  <div className="between mb20"><div><div className="eyebrow">RESEARCH HUB</div><h2 className="serif" style={{fontSize:24,fontWeight:400,letterSpacing:"-.5px"}}>Company Research</h2>{profileDone&&<p style={{fontSize:11,color:"#5a5850",marginTop:4}}>Tailored to: "{seller.problemSolved.slice(0,50)}..."</p>}</div>{co.name&&<div className="row gap8"><select value={acctStatus} onChange={e=>setAcctStatus(e.target.value)} style={{padding:"5px 8px",borderRadius:6,background:"var(--surf)",border:"1px solid var(--bd)",color:"var(--tx)",fontSize:11,fontFamily:"inherit"}}>{STATUSES.map(s=><option key={s.id} value={s.id}>{s.label}</option>)}</select><AB onClick={save} color="#4ade80" sm>{savedMsg||"Save"}</AB></div>}</div>
-                  {profileDone&&<div className="am-chip row gap10 mb14"><span style={{fontSize:11,color:"#f0a500"}}>◆</span><span style={{fontSize:11,color:"#f0a500",flex:1}}>{seller.problemSolved.slice(0,65)}{seller.problemSolved.length>65?"...":""}</span><button onClick={()=>setShowProfile(true)} style={{fontSize:9,color:"#5a5850",background:"none",border:"none",cursor:"pointer",fontFamily:"inherit",letterSpacing:"1.5px"}}>EDIT</button></div>}
-                  <div className="box mb12"><div className="lbl">TARGET ACCOUNT</div><div className="g3"><Fld label="Company *" value={co.name} onChange={e=>setCo(c=>({...c,name:e.target.value}))} ph="Acme Corp"/><Fld label="Industry" value={co.industry} onChange={e=>setCo(c=>({...c,industry:e.target.value}))} ph="SaaS / FinTech"/><Fld label="Website" value={co.website} onChange={e=>setCo(c=>({...c,website:e.target.value}))} ph="acme.com"/></div></div>
-                  <div className="box mb12" style={{borderColor:"rgba(240,165,0,.3)"}}>
-                    <div className="lbl" style={{color:"#f0a500"}}>AUTO RESEARCH — LIVE WEB</div>
-                    <p style={{fontSize:11,color:"#5a5850",marginBottom:12,lineHeight:1.6}}>Claude will search the live web for {co.name||"this company"} and return structured intel automatically. No copy-paste needed.</p>
-                    <button onClick={autoResearchCo} disabled={autoResearchingCo||!co.name||!profileDone} style={{width:"100%",padding:"11px",borderRadius:8,background:autoResearchingCo||!co.name?"rgba(255,255,255,.04)":"linear-gradient(135deg,rgba(240,165,0,.2),rgba(240,165,0,.1))",border:"1px solid rgba(240,165,0,.4)",color:autoResearchingCo||!co.name?"#5a5850":"#f0a500",fontSize:12,fontWeight:500,cursor:autoResearchingCo||!co.name?"not-allowed":"pointer",fontFamily:"inherit",letterSpacing:".5px",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
-                      {autoResearchingCo?<><span className="spin"/>SEARCHING THE WEB...</>:"⚡ AUTO RESEARCH THE WEB"}
-                    </button>
-                  </div>
-                  <div className="box mb12"><div className="lbl" style={{color:geminiKey?"#5a5850":undefined}}>STEP 1 — {geminiKey?"OR GENERATE MANUAL QUERY":"GENERATE QUERY"}</div><AB onClick={getCoQ} loading={loadingCQ} disabled={loadingCQ||!co.name||!profileDone} color="#60a5fa">{loadingCQ?"Generating...":"Generate Company Query"}</AB>{coQuery&&<QBox query={coQuery} copied={cqCopied} onCopy={()=>{navigator.clipboard.writeText(coQuery);setCqCopied(true);setTimeout(()=>setCqCopied(false),2000)}} color="#60a5fa"/>}</div>
-                  <div className="box mb12"><div className="lbl">INDUSTRY TRENDS QUERY</div><p style={{fontSize:11,color:"#5a5850",marginBottom:10,lineHeight:1.6}}>Search for macro trends and tailwinds in {co.industry||seller.sellerIndustry||"their industry"} — useful context for timing and messaging.</p><AB onClick={getTrendQ} loading={loadingTQ} disabled={loadingTQ||!co.name||!profileDone} color="#c084fc">{loadingTQ?"Generating...":"Get Industry Trends Query"}</AB>{trendQuery&&<QBox query={trendQuery} copied={tqCopied} onCopy={()=>{navigator.clipboard.writeText(trendQuery);setTqCopied(true);setTimeout(()=>setTqCopied(false),2000)}} color="#c084fc"/>}</div>
-                  <div className="box mb12"><div className="lbl">STEP 2 — PASTE & ANALYZE</div><textarea className="paste" value={coPasted} onChange={e=>setCoPasted(e.target.value)} placeholder="Paste company research — news, funding, job postings, product launches..." rows={5}/>{coPasted&&<div style={{fontSize:10,color:"#4ade80",marginTop:3}}>✓ {coPasted.split(/\s+/).filter(Boolean).length} words</div>}{err&&<div className="err">{err}</div>}<AB onClick={analyzeComp} loading={analyzingCo} disabled={analyzingCo||!coPasted.trim()} color="#60a5fa" style={{marginTop:10}}>{analyzingCo?"Analyzing...":"Analyze Change Agents"}</AB></div>
-                  {co.name&&<div className="box mb12"><div className="lbl">ACCOUNT NOTES</div><textarea className="ta" value={acctNotes} onChange={e=>setAcctNotes(e.target.value)} placeholder="Internal notes..." rows={2}/></div>}
-                  {coIntel&&(
-                    <div className="fade">
-                      <div className="row gap12 mb12">
-                        <div className="box" style={{flex:1}}><div className="lbl" style={{color:"#60a5fa"}}>SNAPSHOT</div><p style={{fontSize:13,lineHeight:1.8,color:"#bfdbfe",marginBottom:9}}>{coIntel.snapshot}</p><p style={{fontSize:12,color:"#f0a500",fontStyle:"italic",margin:0}}>◆ {coIntel.buyingSignals}</p></div>
-                        <div className="box" style={{border:`2px solid ${coIntel.timingScore==="Hot"?"#f87171":coIntel.timingScore==="Warm"?"#f0a500":"#5a5850"}`,textAlign:"center",minWidth:108,padding:"14px 12px"}}><div style={{fontSize:9,color:"#5a5850",textTransform:"uppercase",letterSpacing:"2px",marginBottom:5}}>TIMING</div><div className="serif" style={{fontSize:22,color:coIntel.timingScore==="Hot"?"#f87171":coIntel.timingScore==="Warm"?"#f0a500":"#5a5850",marginBottom:4}}>{coIntel.timingScore}</div><div style={{fontSize:10,color:"#5a5850",lineHeight:1.5}}>{coIntel.timingReason}</div></div>
-                      </div>
-                      <div className="g2 mb14">{CHANGE_AGENTS.map(ca=>{const items=coIntel[ca.key]||[];if(!items.length)return null;return <ICard key={ca.key} ca={ca} items={items}/>;})}</div>
-                      <button onClick={()=>setResTab("prospects")} style={{width:"100%",padding:"11px",borderRadius:8,background:"#60a5fa",border:"none",color:"#fff",fontSize:12,fontWeight:500,cursor:"pointer",fontFamily:"inherit",letterSpacing:".5px"}}>ADD PROSPECTS →</button>
+              <div className="between mb14">
+                <div>
+                  <div className="eyebrow">RESEARCH</div>
+                  <h2 className="serif" style={{fontSize:24,fontWeight:500}}>Account Intelligence</h2>
+                </div>
+              </div>
+
+              <div className="row gap8 wrap-row mb14">
+                {accounts.map(a=><button key={a.id} className={`ppill${co.name===a.co?.name?" on":""}`} onClick={()=>loadAcct(a)}>{a.co?.name||"Untitled"}</button>)}
+                <button className="ppill" onClick={()=>setView("bobi")}>+ New Account</button>
+              </div>
+
+              {coIntel?(
+                <div className="box mb14">
+                  <div className="lbl" style={{color:"#d97706"}}>◆ Account Snapshot</div>
+                  <div className="row gap12 mb10">
+                    <div style={{minWidth:110,padding:"12px",borderRadius:8,border:`1px solid ${coIntel.timingScore==="Hot"?"#fca5a5":coIntel.timingScore==="Warm"?"#fcd34d":"#d6d3d1"}`,textAlign:"center"}}>
+                      <div style={{fontSize:9,color:"#78716c",letterSpacing:"2px",textTransform:"uppercase"}}>Timing</div>
+                      <div className="serif" style={{fontSize:20,color:coIntel.timingScore==="Hot"?"#b91c1c":coIntel.timingScore==="Warm"?"#b45309":"#57534e"}}>{coIntel.timingScore}</div>
                     </div>
-                  )}
-                </>
-              )}
-              {resTab==="prospects"&&(
-                <>
-                  <div style={{marginBottom:22}}><div className="eyebrow">RESEARCH HUB</div><h2 className="serif" style={{fontSize:24,fontWeight:400,letterSpacing:"-.5px"}}>Prospect Profiles</h2><p style={{fontSize:11,color:"#5a5850",marginTop:4}}>Stakeholders at {co.name||"target account"}</p></div>
-                  <div className="row gap8 mb14 wrap-row">
-                    {prospects.map((p,i)=><button key={i} onClick={()=>setActivePi(i)} className={`ppill${activePi===i?" on":""}`}>{p.firstName} {p.lastName}{p.intel&&<span style={{color:"#4ade80",fontSize:9}}>✓</span>}</button>)}
-                    <button onClick={()=>setAddingP(true)} className="ppill">+ Add</button>
+                    <p style={{fontSize:13,lineHeight:1.8,color:"#44403c",margin:0,flex:1}}>{coIntel.snapshot}</p>
                   </div>
-                  {addingP&&(
-                    <div className="box mb12" style={{borderColor:"rgba(240,165,0,.2)"}}>
-                      <div className="lbl" style={{color:"#f0a500"}}>NEW PROSPECT</div>
-                      <div className="g2 mb10"><Fld label="First Name *" value={newP.firstName} onChange={e=>setNewP(p=>({...p,firstName:e.target.value}))} ph="Sarah"/><Fld label="Last Name" value={newP.lastName} onChange={e=>setNewP(p=>({...p,lastName:e.target.value}))} ph="Johnson"/><Fld label="Title *" value={newP.title} onChange={e=>setNewP(p=>({...p,title:e.target.value}))} ph="VP of Sales"/><Fld label="LinkedIn" value={newP.linkedin} onChange={e=>setNewP(p=>({...p,linkedin:e.target.value}))} ph="linkedin.com/in/..."/></div>
-                      <div className="g2 mb10"><div><div className="fl">Sequence Type</div><select value={newP.seqTypeId} onChange={e=>setNewP(p=>({...p,seqTypeId:e.target.value}))} style={{width:"100%",padding:"7px 9px",borderRadius:6,background:"var(--surf)",border:"1px solid var(--bd)",color:"var(--tx)",fontSize:12,fontFamily:"inherit"}}>{SEQ_TYPES.map(t=><option key={t.id} value={t.id}>{t.icon} {t.label}</option>)}</select></div><div><div className="fl">Buyer Persona</div><select value={newP.personaId} onChange={e=>setNewP(p=>({...p,personaId:e.target.value}))} style={{width:"100%",padding:"7px 9px",borderRadius:6,background:"var(--surf)",border:"1px solid var(--bd)",color:"var(--tx)",fontSize:12,fontFamily:"inherit"}}>{PERSONAS.map(p=><option key={p.id} value={p.id}>{p.icon} {p.label} — {p.sub}</option>)}</select></div></div>
-                      {err&&<div className="err">{err}</div>}
-                      <div className="row gap8"><AB onClick={addProspect} color="#f0a500" sm>Add Prospect</AB><AB onClick={()=>{setAddingP(false);setErr("");}} color="#5a5850" sm>Cancel</AB></div>
-                    </div>
-                  )}
-                  {ap&&(
-                    <div className="fade" key={activePi}>
-                      <div className="row gap12 mb14"><div className="av" style={{width:38,height:38,fontSize:14,background:`hsl(${(activePi||0)*55+180},50%,35%)`}}>{ap.firstName[0]}{ap.lastName?.[0]||""}</div><div><div className="serif" style={{fontSize:18}}>{ap.firstName} {ap.lastName}</div><div style={{fontSize:11,color:"#5a5850"}}>{ap.title} · {co.name}</div></div></div>
-                      <div className="box mb10" style={{borderColor:"rgba(240,165,0,.3)"}}>
-                        <div className="lbl" style={{color:"#f0a500"}}>AUTO RESEARCH — LIVE WEB</div>
-                        <p style={{fontSize:11,color:"#5a5850",marginBottom:12,lineHeight:1.6}}>Claude will search the live web for {ap.firstName} {ap.lastName} and return their intel automatically.</p>
-                        <button onClick={()=>autoResearchPr(activePi)} disabled={ap.analyzing||!profileDone} style={{width:"100%",padding:"11px",borderRadius:8,background:ap.analyzing?"rgba(255,255,255,.04)":"linear-gradient(135deg,rgba(240,165,0,.2),rgba(240,165,0,.1))",border:"1px solid rgba(240,165,0,.4)",color:ap.analyzing?"#5a5850":"#f0a500",fontSize:12,fontWeight:500,cursor:ap.analyzing?"not-allowed":"pointer",fontFamily:"inherit",letterSpacing:".5px",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
-                          {ap.analyzing?<><span className="spin"/>SEARCHING THE WEB...</>:"⚡ AUTO RESEARCH THE WEB"}
-                        </button>
+                  <div style={{padding:"10px 12px",borderRadius:8,background:"rgba(217,119,6,.08)",border:"1px solid rgba(217,119,6,.22)",fontSize:12,color:"#92400e"}}>
+                    <strong>Top Buying Signal:</strong> {coIntel.buyingSignals}
+                  </div>
+                </div>
+              ):(
+                <div className="box mb14">
+                  <div className="lbl">◆ Account Snapshot</div>
+                  <p style={{fontSize:13,color:"#78716c"}}>No intel for this account yet.</p>
+                  <button className="cpbtn pri" onClick={()=>setView("bobi")}>Pull Snapshot →</button>
+                </div>
+              )}
+
+              <div className="between mb10">
+                <div className="lbl" style={{margin:0}}>Prospects</div>
+                <button className="cpbtn pri" onClick={()=>setAddingP(true)}>+ Add Prospect</button>
+              </div>
+
+              {addingP&&(
+                <div className="box mb12">
+                  <div className="g2 mb10">
+                    <Fld label="First Name *" value={newP.firstName} onChange={e=>setNewP(p=>({...p,firstName:e.target.value}))} ph="Sarah"/>
+                    <Fld label="Last Name" value={newP.lastName} onChange={e=>setNewP(p=>({...p,lastName:e.target.value}))} ph="Johnson"/>
+                    <Fld label="Title *" value={newP.title} onChange={e=>setNewP(p=>({...p,title:e.target.value}))} ph="VP of Sales"/>
+                    <Fld label="LinkedIn" value={newP.linkedin} onChange={e=>setNewP(p=>({...p,linkedin:e.target.value}))} ph="linkedin.com/in/..."/>
+                  </div>
+                  <div className="row gap8"><AB onClick={addProspect} color="#d97706" sm>Add Prospect</AB><AB onClick={()=>setAddingP(false)} color="#78716c" sm>Cancel</AB></div>
+                </div>
+              )}
+
+              {prospects.length===0&&<div className="box"><p style={{fontSize:13,color:"#78716c"}}>No prospects yet.</p><button className="cpbtn pri" onClick={()=>setAddingP(true)}>+ Add Prospect</button></div>}
+
+              {prospects.map((p,i)=>{
+                const st=SEQ_TYPES.find(t=>t.id===p.seqTypeId)||SEQ_TYPES[0];
+                const researched=!!p.intel;
+                return(
+                  <div key={i} className="box mb12">
+                    <div className="between mb10">
+                      <div className="row gap10">
+                        <div className="av" style={{width:30,height:30,fontSize:11,background:"#d97706"}}>{p.firstName?.[0]||"?"}{p.lastName?.[0]||""}</div>
+                        <div><div className="serif" style={{fontSize:16}}>{p.firstName} {p.lastName}</div><div style={{fontSize:11,color:"#78716c"}}>{p.title||"—"}</div></div>
                       </div>
-                      <div className="box mb10"><div className="lbl" style={{color:geminiKey?"#5a5850":undefined}}>STEP 1 — {geminiKey?"OR GENERATE MANUAL QUERY":"RESEARCH QUERY"}</div><AB onClick={()=>getPrQ(activePi)} loading={ap.loadingQ} disabled={ap.loadingQ} color="#60a5fa">{ap.loadingQ?"Generating...":"Generate Prospect Query"}</AB>{ap.query&&<QBox query={ap.query} copied={copied==="pq"+activePi} onCopy={()=>cp(ap.query,"pq"+activePi)} color="#60a5fa"/>}</div>
-                      <div className="box mb10"><div className="lbl">STEP 2 — PASTE & ANALYZE</div><textarea className="paste" value={ap.pasted} onChange={e=>upP(activePi,"pasted",e.target.value)} placeholder={`Paste findings about ${ap.firstName}...`} rows={4}/>{ap.pasted&&<div style={{fontSize:10,color:"#4ade80",marginTop:3}}>✓ {ap.pasted.split(/\s+/).filter(Boolean).length} words</div>}{err&&<div className="err">{err}</div>}<AB onClick={()=>analyzePr(activePi)} loading={ap.analyzing} disabled={ap.analyzing||!ap.pasted.trim()} color="#60a5fa" style={{marginTop:10}}>{ap.analyzing?"Analyzing...":"Analyze Prospect"}</AB></div>
-                      {ap.intel&&(
-                        <div className="fade">
-                          <div className="row gap12 mb12">
-                            <div className="box" style={{flex:1}}><div className="lbl" style={{color:"#f0a500"}}>OUTREACH ANGLE</div><p style={{fontSize:13,lineHeight:1.8,color:"#fde68a",marginBottom:9}}>{ap.intel.angle}</p><div style={{padding:"8px 11px",background:"rgba(240,165,0,.07)",border:"1px solid rgba(240,165,0,.28)",borderRadius:6}}><div style={{fontSize:9,color:"#f0a500",textTransform:"uppercase",letterSpacing:"2px",marginBottom:4}}>OPENER</div><p style={{fontSize:12,margin:0,fontStyle:"italic",lineHeight:1.7}}>"{ap.intel.opener}"</p></div></div>
-                            <div className="box" style={{border:`2px solid ${ap.intel.warmth==="Champion"?"#4ade80":ap.intel.warmth==="Influencer"?"#60a5fa":ap.intel.warmth==="Gatekeeper"?"#f87171":"#5a5850"}`,textAlign:"center",minWidth:96,padding:"12px 10px"}}><div style={{fontSize:9,color:"#5a5850",textTransform:"uppercase",letterSpacing:"2px",marginBottom:5}}>ROLE</div><div style={{fontSize:12,fontWeight:500,color:ap.intel.warmth==="Champion"?"#4ade80":ap.intel.warmth==="Influencer"?"#60a5fa":ap.intel.warmth==="Gatekeeper"?"#f87171":"#5a5850"}}>{ap.intel.warmth}</div></div>
-                          </div>
-                          <div className="g2 mb14">{PR_SIGNALS.map(sig=>{const items=ap.intel[sig.key]||[];if(!items.length)return null;return <ICard key={sig.key} ca={sig} items={items}/>;})}</div>
-                          <div className="row gap10">
-                            <button onClick={loadIntel} style={{flex:1,padding:"11px",borderRadius:8,background:"rgba(240,165,0,.12)",border:"1px solid rgba(240,165,0,.28)",color:"#f0a500",fontSize:12,fontWeight:500,cursor:"pointer",fontFamily:"inherit",letterSpacing:".5px"}}>USE INTEL → BUILD SEQUENCE</button>
-                            {!ap.sequence&&<button onClick={()=>buildSeq(activePi)} disabled={ap.generating} style={{flex:1,padding:"11px",borderRadius:8,background:ap.generating?"rgba(255,255,255,.04)":"#f0a500",border:"none",color:ap.generating?"#5a5850":"#0a0a08",fontSize:12,fontWeight:500,cursor:ap.generating?"not-allowed":"pointer",fontFamily:"inherit",letterSpacing:".5px",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>{ap.generating?<><span className="spin"/>GENERATING...</>:"GENERATE & TRACK"}</button>}
-                            {ap.sequence&&<button onClick={()=>{setTrackerPi(activePi);setView("tracker");}} style={{flex:1,padding:"11px",borderRadius:8,background:"rgba(74,222,128,.1)",border:"1px solid rgba(74,222,128,.4)",color:"#4ade80",fontSize:12,fontWeight:500,cursor:"pointer",fontFamily:"inherit",letterSpacing:".5px"}}>OPEN IN TRACKER →</button>}
-                          </div>
-                        </div>
-                      )}
+                      <div className="row gap8"><span className="tag" style={{background:`${st.color}18`,color:st.color}}>{st.label}</span><span className="tag" style={{background:researched?"rgba(21,128,61,.12)":"rgba(107,114,128,.12)",color:researched?"#15803d":"#6b7280"}}>{researched?"✓ Researched":"Not researched"}</span></div>
                     </div>
-                  )}
-                  {!ap&&!addingP&&<div style={{textAlign:"center",padding:"40px 20px",color:"#5a5850"}}><div style={{fontSize:32,marginBottom:12,opacity:.3}}>◎</div><p style={{fontSize:13,marginBottom:14}}>No prospects yet.</p><button onClick={()=>setAddingP(true)} style={{padding:"9px 18px",borderRadius:7,background:"rgba(240,165,0,.12)",border:"1px solid rgba(240,165,0,.28)",color:"#f0a500",fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>+ ADD FIRST PROSPECT</button></div>}
-                </>
-              )}
-              {resTab==="brief"&&(
-                <>
-                  <div style={{marginBottom:22}}><div className="eyebrow">RESEARCH HUB</div><h2 className="serif" style={{fontSize:24,fontWeight:400,letterSpacing:"-.5px"}}>Intel Brief</h2><p style={{fontSize:11,color:"#5a5850",marginTop:4}}>{co.name} · {prospects.filter(p=>p.intel).length} prospect(s)</p></div>
-                  <div className="box mb12">
-                    {coIntel&&<><div className="between mb10"><div className="serif" style={{fontSize:16}}>{co.name}</div><span className="tag" style={{background:coIntel.timingScore==="Hot"?"rgba(248,113,113,.14)":"rgba(240,165,0,.14)",color:coIntel.timingScore==="Hot"?"#f87171":"#f0a500"}}>{coIntel.timingScore} Timing</span></div><p style={{fontSize:12,color:"#5a5850",lineHeight:1.75,marginBottom:7}}>{coIntel.snapshot}</p><p style={{fontSize:12,color:"#f0a500",fontStyle:"italic",marginBottom:16}}>◆ {coIntel.buyingSignals}</p><div className="g3 mb16">{CHANGE_AGENTS.map(ca=>{const items=coIntel[ca.key]||[];if(!items.length)return null;return <div key={ca.key} style={{background:"rgba(0,0,0,.3)",borderRadius:6,padding:"9px 11px"}}><div style={{fontSize:9,color:ca.color,textTransform:"uppercase",letterSpacing:"2px",marginBottom:5}}>{ca.icon} {ca.label}</div>{items.slice(0,2).map((it,i)=><div key={i} style={{fontSize:11,color:"#5a5850",lineHeight:1.5,marginBottom:2}}>· {it}</div>)}</div>;})}</div></>}
-                    <div className="divider" style={{margin:"4px 0 16px"}}/>
-                    {prospects.filter(p=>p.intel).map((p,i,arr)=>(
-                      <div key={i} style={{marginBottom:16,paddingBottom:16,borderBottom:i<arr.length-1?"1px solid #2a2924":"none"}}>
-                        <div className="row gap10 mb8"><div className="av" style={{width:28,height:28,fontSize:11,background:`hsl(${i*55+180},50%,35%)`}}>{p.firstName[0]}{p.lastName?.[0]||""}</div><div><div className="serif" style={{fontSize:14}}>{p.firstName} {p.lastName}</div><div style={{fontSize:11,color:"#5a5850"}}>{p.title}</div></div><span className="tag" style={{marginLeft:"auto",background:p.intel.warmth==="Champion"?"rgba(74,222,128,.1)":"rgba(96,165,250,.1)",color:p.intel.warmth==="Champion"?"#4ade80":"#60a5fa"}}>{p.intel.warmth}</span></div>
-                        <div style={{background:"rgba(240,165,0,.06)",border:"1px solid rgba(240,165,0,.28)",borderRadius:6,padding:"9px 11px"}}><p style={{fontSize:12,margin:"0 0 4px",lineHeight:1.65}}>{p.intel.angle}</p><p style={{fontSize:11,color:"#f0a500",margin:0,fontStyle:"italic"}}>Opener: "{p.intel.opener}"</p></div>
-                      </div>
-                    ))}
+                    {researched&&<>
+                      <div style={{padding:"9px 11px",borderRadius:7,background:"rgba(217,119,6,.08)",border:"1px solid rgba(217,119,6,.22)",fontSize:12,color:"#92400e",marginBottom:8}}><strong>Outreach Angle:</strong> {p.intel.angle}</div>
+                      <div style={{padding:"9px 11px",borderRadius:7,background:"#f5f5f4",border:"1px solid #e7e5e4",fontSize:12,color:"#44403c",marginBottom:10}}><strong>Opener:</strong> {p.intel.opener}</div>
+                    </>}
+                    <div className="row gap8 wrap-row">
+                      {researched?<><button className="cpbtn pri" onClick={()=>{setActivePi(i);buildSeq(i);}}>Build Sequence</button><button className="cpbtn" onClick={()=>autoResearchPr(i)}>Re-Research</button><button className="cpbtn" onClick={()=>cp(p.intel?.opener||"","opener"+i)}>Copy Opener</button></>:<button className="cpbtn pri" onClick={()=>autoResearchPr(i)}>⚡ Auto Research {p.firstName}</button>}
+                    </div>
                   </div>
-                  <div className="row gap10">
-                    <button onClick={()=>{const t=`INTEL BRIEF:${co.name}\n\n`+(coIntel?`${coIntel.snapshot}\n${coIntel.buyingSignals}\n\n`:"")+prospects.filter(p=>p.intel).map(p=>`${p.firstName} ${p.lastName}·${p.title}\n${p.intel.angle}\nOpener:"${p.intel.opener}"\n`).join("\n---\n\n");cp(t,"brief");}} style={{flex:1,padding:"11px",borderRadius:8,background:copied==="brief"?"rgba(74,222,128,.1)":"var(--surf)",border:copied==="brief"?"1px solid rgba(74,222,128,.4)":"1px solid var(--bd)",color:copied==="brief"?"#4ade80":"#5a5850",fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>{copied==="brief"?"COPIED":"COPY FULL BRIEF"}</button>
-                    <button onClick={loadIntel} style={{padding:"11px 18px",borderRadius:8,background:"#f0a500",border:"none",color:"#0a0a08",fontSize:12,fontWeight:500,cursor:"pointer",fontFamily:"inherit",letterSpacing:".5px"}}>BUILD SEQUENCE</button>
-                  </div>
-                </>
-              )}
+                );
+              })}
+              {err&&<div className="err">{err}</div>}
             </div>
           )}
 
           {view==="tracker"&&(
             <div className="fade">
-              <div style={{marginBottom:22}}><div className="eyebrow">SEQUENCE TRACKER</div><h2 className="serif" style={{fontSize:24,fontWeight:400,letterSpacing:"-.5px"}}>{tp?`${tp.firstName} ${tp.lastName}`:"Select a Prospect"}</h2>{tp&&<p style={{fontSize:11,color:"#5a5850",marginTop:4}}>{tp.title} · {co.name} · {(SEQ_TYPES.find(t=>t.id===tp.seqTypeId)||SEQ_TYPES[0]).label} · {(PERSONAS.find(p=>p.id===tp.personaId)||PERSONAS[0]).label}</p>}</div>
-              {prospects.length===0&&<div style={{textAlign:"center",padding:"48px 20px",color:"#5a5850"}}><div style={{fontSize:32,opacity:.3,marginBottom:12}}>▤</div><p style={{fontSize:13,marginBottom:14}}>Research prospects first, then generate their sequences here.</p><button onClick={()=>setView("research")} style={{padding:"9px 18px",borderRadius:7,background:"rgba(240,165,0,.12)",border:"1px solid rgba(240,165,0,.28)",color:"#f0a500",fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>Go to Research</button></div>}
-              {prospects.length>0&&(
-                <div className="row gap16" style={{alignItems:"flex-start"}}>
-                  <div style={{width:180,flexShrink:0}}>
-                    {prospects.map((p,i)=>(
-                      <div key={i} className={`tp${trackerPi===i?" on":""}`} onClick={()=>setTrackerPi(i)}>
-                        <div className="row gap8 mb8"><div className="av" style={{width:28,height:28,fontSize:11,background:`hsl(${i*55+180},50%,35%)`}}>{p.firstName[0]}{p.lastName?.[0]||""}</div><div style={{minWidth:0}}><div style={{fontSize:12,fontWeight:500,color:trackerPi===i?"#f0a500":"#e8e3d8",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.firstName} {p.lastName}</div><div style={{fontSize:10,color:"#5a5850",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.title}</div></div></div>
-                        {p.sequence?<><div className="between mb5"><span style={{fontSize:10,color:"#5a5850"}}>Progress</span><span style={{fontSize:10,color:"#4ade80",fontWeight:500}}>{doneCount(p)}/{totalT(p)}</span></div><div className="prog-bg"><div className="prog-fill" style={{width:`${(doneCount(p)/totalT(p))*100}%`}}/></div></>:<div style={{fontSize:10,color:"#5a5850",fontStyle:"italic"}}>No sequence yet</div>}
-                      </div>
-                    ))}
-                  </div>
-                  <div style={{flex:1}}>
-                    {tp===null&&<div style={{textAlign:"center",padding:"40px 20px",color:"#5a5850",fontSize:13}}>Select a prospect to view their sequence.</div>}
-                    {tp&&!tp.sequence&&<div className="box" style={{textAlign:"center",padding:"24px"}}><div style={{fontSize:28,marginBottom:12,opacity:.4}}>⟡</div><p style={{fontSize:13,color:"#5a5850",marginBottom:16,lineHeight:1.7}}>No sequence for {tp.firstName} yet.{tp.intel?" Ready to generate.":""}</p>{tp.intel&&<button onClick={()=>buildSeq(trackerPi)} disabled={tp.generating} style={{padding:"10px 22px",borderRadius:8,background:tp.generating?"rgba(255,255,255,.04)":"#f0a500",border:"none",color:tp.generating?"#5a5850":"#0a0a08",fontSize:12,fontWeight:500,cursor:tp.generating?"not-allowed":"pointer",fontFamily:"inherit",display:"inline-flex",alignItems:"center",gap:8}}>{tp.generating?<><span className="spin"/>GENERATING...</>:"GENERATE SEQUENCE"}</button>}{!tp.intel&&<button onClick={()=>{setActivePi(trackerPi);setView("research");setResTab("prospects");}} style={{padding:"10px 22px",borderRadius:8,background:"rgba(240,165,0,.12)",border:"1px solid rgba(240,165,0,.28)",color:"#f0a500",fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>RESEARCH THIS PROSPECT</button>}</div>}
-                    {tp&&tp.sequence&&(()=>{
-                      const st=SEQ_TYPES.find(t=>t.id===tp.seqTypeId)||SEQ_TYPES[0];
-                      const nxt=nextT(tp);
-                      return(<>
-                        {nxt&&(
-                          <div className="next-card mb14">
-                            <div className="between mb12"><div style={{fontSize:9,color:"#f0a500",letterSpacing:"3px",textTransform:"uppercase"}}>▶ NEXT TOUCH</div><div style={{fontSize:11,color:"#f0a500"}}>{nxt.daysFromPrev===0?"Send today":`${nxt.daysFromPrev} day${nxt.daysFromPrev!==1?"s":""} after previous`}</div></div>
-                            <div className="row gap12">
-                              <div style={{fontSize:22}}>{nxt.touch.icon}</div>
-                              <div style={{flex:1}}>
-                                <div className="row gap8 mb8"><span style={{fontSize:13,fontWeight:500}}>{nxt.touch.label}</span><span style={{fontSize:10,color:"#5a5850"}}>{nxt.touch.dl} · {nxt.touch.ch}</span></div>
-                                {nxt.content.subject&&<div style={{fontSize:12,color:"#f0a500",marginBottom:7,fontWeight:500}}>Subject: {nxt.content.subject}</div>}
-                                <div className="msg-body mb10">{nxt.content.body}</div>
-                                <div className="row gap8"><button className={`cpbtn${copied==="next_b"?" ok":""}`} onClick={()=>cp(nxt.content.body,"next_b")}>{copied==="next_b"?"COPIED":"COPY MESSAGE"}</button>{nxt.content.subject&&<button className={`cpbtn${copied==="next_a"?" ok":""}`} onClick={()=>cp(`Subject:${nxt.content.subject}\n\n${nxt.content.body}`,"next_a")}>{copied==="next_a"?"COPIED":"COPY BOTH"}</button>}<button onClick={()=>toggleTouch(trackerPi,nxt.touchId)} style={{marginLeft:"auto",padding:"6px 14px",borderRadius:7,background:"#4ade80",border:"none",color:"#0a0a08",fontSize:11,fontWeight:500,cursor:"pointer",fontFamily:"inherit",letterSpacing:".5px"}}>MARK DONE</button></div>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                        {!nxt&&<div style={{background:"rgba(74,222,128,.1)",border:"1px solid rgba(74,222,128,.4)",borderRadius:10,padding:"16px 18px",textAlign:"center",marginBottom:14}}><div style={{fontSize:22,marginBottom:8}}>🎉</div><div style={{fontSize:14,color:"#4ade80",fontWeight:500,marginBottom:4}}>All touches complete!</div><div style={{fontSize:12,color:"#5a5850"}}>Full {totalT(tp)}-touch sequence finished for {tp.firstName}.</div></div>}
-                        <div className="box">
-                          <div className="lbl">SEQUENCE TIMELINE</div>
-                          {st.steps.map((sid,idx)=>{
-                            const touch=TOUCHES.find(t=>t.id===sid);
-                            const content=tp.sequence[sid];
-                            const done=(tp.touchDone||{})[sid];
-                            const isNext=nxt?.touchId===sid;
-                            const date=(tp.touchDates||{})[sid];
-                            const note=(tp.touchNotes||{})[sid]||"";
-                            const outcome=(tp.touchOutcome||{})[sid]||"";
-                            const cs=CH[touch.ch];
-                            return(
-                              <div key={sid} className="tl-item">
-                                <div className="tl-spine"><div className={`cb${done?" done":""}`} onClick={()=>toggleTouch(trackerPi,sid)}>{done&&<span style={{color:"#0a0a08",fontSize:11,fontWeight:700}}>✓</span>}{!done&&isNext&&<span style={{color:"#f0a500",fontSize:10,animation:"pulse 1.5s infinite"}}>▶</span>}</div>{idx<st.steps.length-1&&<div className="tl-line" style={{background:done?"rgba(74,222,128,.4)":"#2a2924"}}/>}</div>
-                                <div className="tl-body" style={{opacity:done?.55:1}}>
-                                  <div className="tl-hdr"><span style={{fontSize:14}}>{touch.icon}</span><span style={{fontSize:12,fontWeight:500,color:isNext?"#f0a500":done?"#4ade80":"#e8e3d8"}}>{touch.label}</span><span className="tag" style={{background:cs.bg,color:cs.tx,border:`1px solid ${cs.bd}`}}>{touch.dl}</span>{done&&date&&<span style={{fontSize:10,color:"#5a5850"}}>Done {fmt(date)}</span>}{isNext&&!done&&<span style={{fontSize:10,color:"#f0a500",animation:"pulse 1.5s infinite"}}>← NEXT</span>}</div>
-                                  {(isNext||done)&&content&&<div className="mb8">{content.subject&&<div style={{fontSize:11,color:"#f0a500",marginBottom:5}}>Subject: {content.subject}</div>}<div style={{fontSize:12,color:done?"#5a5850":"#e8e3d8",lineHeight:1.75,whiteSpace:"pre-wrap",background:"rgba(0,0,0,.2)",border:"1px solid #2a2924",borderRadius:6,padding:"9px 11px",maxHeight:120,overflowY:"auto"}}>{content.body}</div>{!done&&<div className="row gap6" style={{marginTop:7}}><button className={`cpbtn${copied===sid+"_b"?" ok":""}`} onClick={()=>cp(content.body,sid+"_b")}>{copied===sid+"_b"?"✓":"Copy"}</button>{content.subject&&<button className={`cpbtn${copied===sid+"_a"?" ok":""}`} onClick={()=>cp(`Subject:${content.subject}\n\n${content.body}`,sid+"_a")}>{copied===sid+"_a"?"✓ Both":"Copy Both"}</button>}</div>}</div>}
-                                  {done&&<div className="g2 gap8 mb8"><select className="outcome-sel" value={outcome} onChange={e=>upP(trackerPi,"touchOutcome",{...(tp.touchOutcome||{}),[sid]:e.target.value})} style={{padding:"5px 8px",borderRadius:6,background:"var(--surf)",border:"1px solid var(--bd)",color:"#5a5850",fontSize:11,fontFamily:"inherit"}}><option value="">Outcome...</option><option>No response</option><option>Opened</option><option>Replied</option><option>Booked meeting</option><option>Not interested</option></select><input value={note} onChange={e=>upP(trackerPi,"touchNotes",{...(tp.touchNotes||{}),[sid]:e.target.value})} placeholder="Quick note..." style={{padding:"5px 8px",borderRadius:6,background:"var(--surf)",border:"1px solid var(--bd)",color:"#5a5850",fontSize:11,fontFamily:"inherit",width:"100%"}}/></div>}
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </>);
-                    })()}
-                  </div>
-                </div>
-              )}
+              {(()=>{
+                const pipeline = bobiAccounts.filter(a=>a.inPipeline);
+                const closedWon = bobiAccounts.filter(a=>a.stage==="Closed Won");
+                const stale = bobiAccounts.filter(a=>a.stale);
+                const atRisk = bobiAccounts.filter(a=>a.inPipeline && a.timing==="Cold");
+                const hotPipeline = bobiAccounts.filter(a=>a.inPipeline && a.timing==="Hot");
+                const stuckDiscovery = bobiAccounts.filter(a=>a.inPipeline && a.stage==="Discovery");
+                const attentionRows = bobiAccounts.map(a=>{
+                  let score = 0;
+                  if((a.prospects?.length||0)===0) score += 3;
+                  if(a.stale) score += 2;
+                  if(!a.coIntel) score += 1;
+                  if(a.timing==="Cold") score += 1;
+                  return {a,score};
+                }).sort((x,y)=>y.score-x.score).slice(0,10);
+                return (
+                  <>
+                    <div style={{marginBottom:16}}>
+                      <div className="eyebrow">TRACKER</div>
+                      <h2 className="serif" style={{fontSize:24,fontWeight:500}}>Pipeline Health Dashboard</h2>
+                      <p style={{fontSize:12,color:"#57534e"}}>Your Monday morning view — what needs attention this week</p>
+                    </div>
+                    <div className="row gap8 wrap-row mb14">
+                      <div className="stat-box"><div style={{fontSize:16,fontWeight:700}}>${pipeline.reduce((n,a)=>n+a.revenue,0).toLocaleString()}</div><div style={{fontSize:9,color:"#78716c"}}>Pipeline Value</div></div>
+                      <div className="stat-box"><div style={{fontSize:16,fontWeight:700,color:"#15803d"}}>${closedWon.reduce((n,a)=>n+a.revenue,0).toLocaleString()}</div><div style={{fontSize:9,color:"#78716c"}}>Closed Won</div></div>
+                      <div className="stat-box"><div style={{fontSize:16,fontWeight:700,color:"#b45309"}}>{stale.length}</div><div style={{fontSize:9,color:"#78716c"}}>Stale Accounts</div></div>
+                      <div className="stat-box"><div style={{fontSize:16,fontWeight:700,color:"#b91c1c"}}>{atRisk.length}</div><div style={{fontSize:9,color:"#78716c"}}>At Risk</div></div>
+                    </div>
+
+                    <div className="box mb12"><div className="lbl">Hot Pipeline — Close This Week</div>{hotPipeline.length?hotPipeline.map(a=><div key={a.id} className="tp"><div className="between"><strong>{a.co?.name}</strong><div className="row gap6"><span className="tag" style={{background:(stageCfg[a.stage]||stageCfg.Prospecting).bg,color:(stageCfg[a.stage]||stageCfg.Prospecting).color}}>{a.stage}</span><span className="tag" style={{background:"rgba(239,68,68,.12)",color:"#b91c1c"}}>{a.timing}</span></div></div><div style={{fontSize:11,color:"#78716c"}}>${a.revenue.toLocaleString()}</div></div>):<p style={{fontSize:12,color:"#78716c"}}>No hot pipeline accounts.</p>}</div>
+
+                    <div className="box mb12"><div className="lbl">Stale Accounts — Re-engage Now</div>{stale.length?stale.map(a=><div key={a.id} className="tp"><div className="between"><strong>{a.co?.name}</strong><button className="cpbtn" onClick={()=>{loadAcct(a);setView("research");}}>Open</button></div><div style={{fontSize:11,color:"#78716c"}}>{a.co?.industry||"—"} · ${a.revenue.toLocaleString()} · {a.stage}</div><span className="tag" style={{background:"rgba(180,83,9,.12)",color:"#b45309"}}>30+ days no activity</span></div>):<p style={{fontSize:12,color:"#78716c"}}>No stale accounts.</p>}</div>
+
+                    <div className="box mb12"><div className="lbl">Stuck in Discovery — Push Forward</div>{stuckDiscovery.length?stuckDiscovery.map(a=><div key={a.id} className="tp"><div className="between"><strong>{a.co?.name}</strong><span>${a.revenue.toLocaleString()}</span></div><div style={{fontSize:11,color:"#78716c"}}>{a.timing} · {a.prospects?.length||0} prospects</div></div>):<p style={{fontSize:12,color:"#78716c"}}>No discovery-stage blockers.</p>}</div>
+
+                    <div className="box mb12">
+                      <div className="lbl">Top 10 Accounts Needing Attention</div>
+                      <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+                        <thead><tr style={{textAlign:"left",color:"#78716c"}}><th>#</th><th>Company</th><th>Industry</th><th>Revenue</th><th>Stage</th><th>Timing</th><th>Prospects</th><th>Action</th></tr></thead>
+                        <tbody>{attentionRows.map(({a,score},i)=><tr key={a.id} style={{borderTop:"1px solid #e7e5e4"}}><td style={{padding:"8px 0"}}>{i+1}</td><td>{a.co?.name}</td><td>{a.co?.industry||"—"}</td><td>${a.revenue.toLocaleString()}</td><td>{a.stage}</td><td>{a.timing}</td><td>{a.prospects?.length||0}</td><td>{(a.prospects?.length||0)===0?<button className="cpbtn">+ Add Stakeholder</button>:a.stale?<button className="cpbtn">Re-engage</button>:<button className="cpbtn">Research</button>} <span style={{fontSize:10,color:"#a8a29e"}}>S{score}</span></td></tr>)}</tbody>
+                      </table>
+                    </div>
+
+                    <div className="box">
+                      <div className="lbl">Stage Progression</div>
+                      {stageOrder.map(s=>{const rows=bobiAccounts.filter(a=>a.stage===s);const rev=rows.reduce((n,a)=>n+a.revenue,0);return <div key={s} className="between mb8"><span>{s}</span><div className="row gap8"><div style={{width:160,height:6,background:"#e7e5e4",borderRadius:4}}><div style={{height:"100%",width:`${Math.min(100,rows.length*12)}%`,background:(stageCfg[s]||stageCfg.Prospecting).color,borderRadius:4}}/></div><span style={{fontSize:11,color:"#78716c"}}>{rows.length} · ${rev.toLocaleString()}</span></div></div>;})}
+                    </div>
+                  </>
+                );
+              })()}
             </div>
           )}
 
           {view==="settings"&&(
             <div className="fade">
-              <div style={{marginBottom:22}}><div className="eyebrow">SETTINGS</div><h2 className="serif" style={{fontSize:24,fontWeight:400,letterSpacing:"-.5px"}}>API Configuration</h2><p style={{fontSize:11,color:"#5a5850",marginTop:4}}>Configure your API keys. Stored locally — never sent anywhere except the respective API.</p></div>
-              <div className="box mb12" style={{borderColor:geminiKey?"rgba(74,222,128,.3)":"rgba(240,165,0,.3)"}}>
-                <div className="lbl" style={{color:geminiKey?"#4ade80":"#f0a500"}}>AUTO RESEARCH {geminiKey&&"— ACTIVE"}</div>
-                <p style={{fontSize:11,color:"#5a5850",lineHeight:1.7,marginBottom:14}}>Auto-research is powered by Claude with live web search — no extra API key needed. When connected, one-click research replaces manual copy-paste entirely.</p>
-                <div style={{display:"flex",gap:8,marginBottom:geminiKey?12:0}}>
-                  <input
-                    type="password"
-                    value={geminiInput}
-                    onChange={e=>setGeminiInput(e.target.value)}
-                    placeholder="No key needed — powered by Claude"
-                    className="fi"
-                    style={{flex:1,fontFamily:"monospace"}}
-                  />
-                  <button
-                    onClick={async()=>{
-                      if(!geminiInput.trim()){setErr("Paste your API key first.");return;}
-                      await sSet("gw-gemini-key",geminiInput.trim());
-                      setGeminiKey(geminiInput.trim());
-                      setErr("");
-                    }}
-                    style={{padding:"7px 16px",borderRadius:7,background:"#f0a500",border:"none",color:"#0a0a08",fontSize:12,fontWeight:500,cursor:"pointer",fontFamily:"inherit",flexShrink:0,letterSpacing:".5px"}}
-                  >SAVE KEY</button>
-                  {geminiKey&&<button
-                    onClick={async()=>{await sSet("gw-gemini-key","");setGeminiKey("");setGeminiInput("");}}
-                    style={{padding:"7px 12px",borderRadius:7,background:"transparent",border:"1px solid rgba(248,113,113,.3)",color:"#f87171",fontSize:12,cursor:"pointer",fontFamily:"inherit",flexShrink:0}}
-                  >REMOVE</button>}
-                </div>
-                {geminiKey&&(
-                  <div style={{padding:"8px 11px",background:"rgba(74,222,128,.06)",border:"1px solid rgba(74,222,128,.3)",borderRadius:6,fontSize:11,color:"#4ade80"}}>
-                    Connected — Auto Research buttons are now active on the Company and Prospect tabs.
-                  </div>
-                )}
-                {err&&<div className="err">{err}</div>}
+              <div style={{marginBottom:22}}><div className="eyebrow">SETTINGS</div><h2 className="serif" style={{fontSize:24,fontWeight:400,letterSpacing:"-.5px"}}>Configuration</h2><p style={{fontSize:11,color:"#5a5850",marginTop:4}}>Auto-research is powered by Claude — no extra key needed.</p></div>
+              <div className="box mb12" style={{borderColor:"rgba(74,222,128,.3)"}}>
+                <div className="lbl" style={{color:"#4ade80"}}>AUTO RESEARCH — ACTIVE</div>
+                <p style={{fontSize:11,color:"#5a5850",lineHeight:1.7}}>Auto-research uses Claude with live web search. One-click research replaces manual copy-paste entirely. No configuration needed.</p>
               </div>
               <div className="box" style={{opacity:.5}}>
                 <div className="lbl">ANTHROPIC API KEY</div>
-                <p style={{fontSize:11,color:"#5a5850",lineHeight:1.7}}>The Claude API key is managed by this platform automatically — no configuration needed.</p>
+                <p style={{fontSize:11,color:"#5a5850",lineHeight:1.7}}>The Claude API key is managed by this platform automatically.</p>
               </div>
             </div>
           )}
@@ -760,40 +737,45 @@ export default function Home(){
                   {coIntel&&<div style={{background:"rgba(74,222,128,.06)",border:"1px solid rgba(74,222,128,.4)",borderRadius:7,padding:"8px 14px",marginBottom:12,display:"flex",alignItems:"center",gap:9}}><span style={{fontSize:11,color:"#4ade80"}}>✓ Intel loaded · {co.name} · {coIntel.timingScore} Timing</span><button onClick={loadIntel} style={{marginLeft:"auto",padding:"4px 10px",borderRadius:6,background:"rgba(74,222,128,.1)",border:"1px solid rgba(74,222,128,.4)",color:"#4ade80",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>Re-apply</button></div>}
                   <div className="box mb12"><div className="lbl">PROSPECT</div><div className="g2"><Fld label="First Name *" value={seqForm.firstName} onChange={e=>setSeqForm(f=>({...f,firstName:e.target.value}))} ph="Sarah"/><Fld label="Last Name" value={seqForm.lastName} onChange={e=>setSeqForm(f=>({...f,lastName:e.target.value}))} ph="Johnson"/><Fld label="Company *" value={seqForm.company} onChange={e=>setSeqForm(f=>({...f,company:e.target.value}))} ph="Acme Corp"/><Fld label="Title" value={seqForm.title} onChange={e=>setSeqForm(f=>({...f,title:e.target.value}))} ph="VP of Sales"/><Fld label="Industry" value={seqForm.industry} onChange={e=>setSeqForm(f=>({...f,industry:e.target.value}))} ph="SaaS / FinTech"/></div></div>
                   <div className="box mb12"><div className="lbl">MESSAGING CONTEXT</div><div className="g2"><Fld label="Their Pain Point" value={seqForm.painPoint} onChange={e=>setSeqForm(f=>({...f,painPoint:e.target.value}))} ph="What keeps them up at night?" ta/><Fld label="Value Proposition" value={seqForm.valueprop} onChange={e=>setSeqForm(f=>({...f,valueprop:e.target.value}))} ph="How do you solve it?" ta/><Fld label="Social Proof" value={seqForm.socialProof} onChange={e=>setSeqForm(f=>({...f,socialProof:e.target.value}))} ph="Customer result or case study" ta/>{extCfg[seqType.id]&&<Fld label={extCfg[seqType.id].label} value={seqForm[extCfg[seqType.id].key]} onChange={e=>setSeqForm(f=>({...f,[extCfg[seqType.id].key]:e.target.value}))} ph={extCfg[seqType.id].ph} ta/>}</div></div>
-                  <div className="box mb14"><div className="lbl">RESEARCH (OPTIONAL)</div><AB onClick={async()=>{if(!seqForm.company){setErr("Enter company.");return;}setErr("");setLoadingSQ(true);try{const d=await ai(Q_CO(seller),`${seqForm.firstName} ${seqForm.lastName} at ${seqForm.company}`);setSeqQuery(d.query);}catch{setErr("Failed.");}setLoadingSQ(false);}} loading={loadingSQ} disabled={loadingSQ||!seqForm.company} color="#f0a500" sm>{loadingSQ?"Generating...":"Get Research Query"}</AB>{seqQuery&&<QBox query={seqQuery} copied={sqCopied} onCopy={()=>{navigator.clipboard.writeText(seqQuery);setSqCopied(true);setTimeout(()=>setSqCopied(false),2000)}} color="#f0a500"/>}<textarea className="paste" value={seqIntel} onChange={e=>setSeqIntel(e.target.value)} placeholder="Paste research or leave blank..." rows={4} style={{marginTop:10}}/></div>
+                  <div className="box mb14"><div className="lbl">RESEARCH (OPTIONAL)</div><AB onClick={async()=>{if(!seqForm.company){setErr("Enter company.");return;}setErr("");setLoadingSQ(true);try{const d=await ai(Q_CO(seller),`${seqForm.firstName} ${seqForm.lastName} at ${seqForm.company}`);setSeqQuery(d.query);}catch(e){setErr(e?.message||"Failed.");}setLoadingSQ(false);}} loading={loadingSQ} disabled={loadingSQ||!seqForm.company} color="#f0a500" sm>{loadingSQ?"Generating...":"Get Research Query"}</AB>{seqQuery&&<QBox query={seqQuery} copied={sqCopied} onCopy={()=>{navigator.clipboard.writeText(seqQuery);setSqCopied(true);setTimeout(()=>setSqCopied(false),2000)}} color="#f0a500"/>}<textarea className="paste" value={seqIntel} onChange={e=>setSeqIntel(e.target.value)} placeholder="Paste research or leave blank..." rows={4} style={{marginTop:10}}/></div>
                   {err&&<div className="err mb12">{err}</div>}
                   <button className="gen-btn" disabled={generating} onClick={generateSeq}>{generating?<><span className="spin"/>GENERATING...</>:`GENERATE ${seqType.label.toUpperCase()} SEQUENCE`}</button>
                 </>
               )}
-              {seqTab==="results"&&generated&&(
+              {seqTab==="results"&&(
                 <>
-                  <div className="mb20"><div className="eyebrow">SEQUENCE RESULTS</div><h2 className="serif" style={{fontSize:22,fontWeight:400,letterSpacing:"-.5px",marginBottom:8}}>{seqForm.firstName} {seqForm.lastName} · {seqType.label}</h2><div className="row gap8 wrap-row"><span className="tag" style={{background:`${seqType.color}12`,color:seqType.color,border:`1px solid ${seqType.color}30`}}>{seqType.icon} {seqType.label}</span><span className="tag" style={{background:`${persona.color}12`,color:persona.color,border:`1px solid ${persona.color}30`}}>{persona.icon} {persona.label}</span><span className="tag" style={{background:"var(--surf)",color:"var(--mt)"}}>{seqForm.company}</span></div></div>
-                  <div className="row gap12" style={{alignItems:"flex-start"}}>
-                    <div style={{width:172,flexShrink:0}}>
-                      {seqType.steps.map(sid=>{
-                        const t=TOUCHES.find(x=>x.id===sid);if(!t)return null;
-                        const isA=activeStep===sid;const cs=CH[t.ch];
-                        return <button key={sid} onClick={()=>setActiveStep(sid)} className="step-btn" style={{background:isA?cs.bg:"transparent",borderColor:isA?cs.bd:"rgba(255,255,255,.07)"}}><span style={{fontSize:13}}>{t.icon}</span><div><div style={{fontSize:9,color:isA?cs.tx:"#5a5850",textTransform:"uppercase",letterSpacing:"1px"}}>{t.dl}</div><div style={{fontSize:11,fontWeight:isA?500:400,color:isA?"#e8e3d8":"#5a5850"}}>{t.label}</div></div></button>;
-                      })}
-                    </div>
-                    {(()=>{
-                      const t=TOUCHES.find(x=>x.id===activeStep);const c=generated[activeStep];
-                      const sl=seqType.steps;const idx=sl.indexOf(activeStep);
-                      if(!t||!c)return null;const cs=CH[t.ch];
-                      return(
-                        <div style={{flex:1}}>
-                          <div className="box mb10">
-                            <div className="between mb14"><div className="row gap10"><span style={{fontSize:20}}>{t.icon}</span><div><div style={{fontSize:9,color:"#5a5850",textTransform:"uppercase",letterSpacing:"2px"}}>{t.dl} · {t.ch}</div><div className="serif" style={{fontSize:15}}>{t.label}</div></div></div><span className="tag" style={{background:cs.bg,color:cs.tx,border:`1px solid ${cs.bd}`}}>{t.ch}</span></div>
-                            {c.subject&&<div className="mb10"><div className="lbl">SUBJECT</div><div style={{padding:"8px 11px",background:"var(--amdim)",border:"1px solid var(--ambdr)",borderRadius:6,fontSize:13,fontWeight:500,color:"#f0a500"}}>{c.subject}</div></div>}
-                            <div className="mb14"><div className="lbl">MESSAGE</div><div style={{padding:"13px",background:"rgba(0,0,0,.25)",border:"1px solid rgba(255,255,255,.07)",borderRadius:7,fontSize:13,lineHeight:1.85,whiteSpace:"pre-wrap",color:"#e8e3d8"}}>{c.body}</div></div>
-                            <div className="row gap6">{c.subject&&<button className={`cpbtn${copied===activeStep+"_s"?" ok":""}`} onClick={()=>cp(c.subject,activeStep+"_s")}>{copied===activeStep+"_s"?"COPIED":"COPY SUBJECT"}</button>}<button className={`cpbtn pri${copied===activeStep+"_b"?" ok":""}`} onClick={()=>cp(c.body,activeStep+"_b")}>{copied===activeStep+"_b"?"COPIED":"COPY MESSAGE"}</button><button className={`cpbtn${copied===activeStep+"_a"?" ok":""}`} onClick={()=>cp(`Subject:${c.subject||""}\n\n${c.body}`,activeStep+"_a")}>{copied===activeStep+"_a"?"COPIED":"COPY BOTH"}</button></div>
-                          </div>
-                          <div className="between"><button disabled={idx===0} onClick={()=>setActiveStep(sl[idx-1])} style={{padding:"6px 12px",borderRadius:7,background:"transparent",border:"1px solid rgba(255,255,255,.07)",color:idx===0?"#2a2924":"#5a5850",cursor:idx===0?"not-allowed":"pointer",fontFamily:"inherit",fontSize:11}}>← PREV</button><span style={{fontSize:10,color:"#5a5850",letterSpacing:"1px"}}>{idx+1} / {sl.length}</span><button disabled={idx===sl.length-1} onClick={()=>setActiveStep(sl[idx+1])} style={{padding:"6px 12px",borderRadius:7,background:idx===sl.length-1?"transparent":"#f0a500",border:idx===sl.length-1?"1px solid rgba(255,255,255,.07)":"none",color:idx===sl.length-1?"#2a2924":"#0a0a08",cursor:idx===sl.length-1?"not-allowed":"pointer",fontFamily:"inherit",fontSize:11,fontWeight:500}}>NEXT →</button></div>
-                        </div>
-                      );
-                    })()}
-                  </div>
-                  <button onClick={()=>{setSeqTab("build");setGenerated(null);}} style={{marginTop:16,padding:"6px 12px",borderRadius:7,background:"transparent",border:"1px solid rgba(255,255,255,.07)",color:"#5a5850",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>+ NEW SEQUENCE</button>
+                  {(()=>{
+                    const allSeq = accounts.flatMap(a=>(a.prospects||[]).filter(p=>p.sequence).map(p=>{
+                      const st=SEQ_TYPES.find(t=>t.id===p.seqTypeId)||SEQ_TYPES[0];
+                      const done = Object.keys(p.touchDone||{}).length;
+                      const nextId = st.steps.find(id=>!(p.touchDone||{})[id]);
+                      const nextTouch = nextId ? (TOUCHES.find(t=>t.id===nextId)?.label || nextId) : "Complete";
+                      const dueDate = nextId ? (()=>{ const d = TOUCHES.find(t=>t.id===nextId)?.day||1; const base = p.seqStartDate?new Date(p.seqStartDate):new Date(); return new Date(base.getTime()+d*86400000); })() : null;
+                      const overdue = dueDate ? dueDate < new Date() : false;
+                      return {account:a, prospect:p, st, done, total:st.steps.length, nextTouch, dueDate, overdue};
+                    }));
+                    const overdueRows = allSeq.filter(r=>r.overdue);
+                    const filtered = allSeq.filter(r=>seqTypeFilter==="all"||r.st.id===seqTypeFilter).sort((a,b)=>Number(b.overdue)-Number(a.overdue));
+                    const grouped = SEQ_TYPES.map(st=>({st,rows:filtered.filter(r=>r.st.id===st.id)})).filter(g=>g.rows.length);
+                    const fmtDue = d=>d?d.toLocaleDateString("en-US",{month:"short",day:"numeric"}):"—";
+                    const status = r=>r.overdue?"Overdue":(r.dueDate&&Math.abs((r.dueDate-new Date())/86400000)<1?"Due Today":"On Track");
+                    const statusColor = s=>s==="Overdue"?"#b91c1c":s==="Due Today"?"#b45309":"#15803d";
+                    return <>
+                      <div className="between mb14">
+                        <div><div className="eyebrow">SEQUENCE</div><h2 className="serif" style={{fontSize:24,fontWeight:500}}>Active Sequences</h2><p style={{fontSize:12,color:"#57534e"}}>{allSeq.length} active prospect sequence(s)</p></div>
+                        <button className="cpbtn pri" onClick={()=>setSeqTab("build")}>+ New Sequence</button>
+                      </div>
+                      {overdueRows.length>0&&<div className="box mb12" style={{background:"rgba(185,28,28,.08)",borderColor:"rgba(185,28,28,.25)"}}><div className="lbl" style={{color:"#b91c1c"}}>Overdue</div><p style={{fontSize:12,color:"#7f1d1d"}}>{overdueRows.map(r=>`${r.prospect.firstName} ${r.prospect.lastName}`).join(", ")}</p></div>}
+                      <div className="between mb12">
+                        <div className="row gap8">{["type","prospect"].map(v=><button key={v} className={`ppill${seqViewMode===v?" on":""}`} onClick={()=>setSeqViewMode(v)}>{v==="type"?"By Sequence Type":"By Prospect"}</button>)}</div>
+                        <select className="fi" style={{maxWidth:280}} value={seqTypeFilter} onChange={e=>setSeqTypeFilter(e.target.value)}>
+                          <option value="all">All Sequence Types</option>
+                          {SEQ_TYPES.map(st=><option key={st.id} value={st.id}>{st.icon} {st.label}</option>)}
+                        </select>
+                      </div>
+                      {seqViewMode==="type" ? grouped.map(g=><div key={g.st.id} className="box mb12"><div className="between mb8"><span className="tag" style={{background:`${g.st.color}18`,color:g.st.color}}>{g.st.icon} {g.st.label}</span><span style={{fontSize:11,color:"#78716c"}}>{g.rows.length} prospect(s)</span></div><table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}><thead><tr style={{textAlign:"left",color:"#78716c"}}><th>Prospect</th><th>Company</th><th>Touch</th><th>Progress</th><th>Next Due</th><th>Status</th></tr></thead><tbody>{g.rows.map((r,i)=><tr key={i} style={{borderTop:"1px solid #e7e5e4"}}><td style={{padding:"8px 0"}}>{r.prospect.firstName} {r.prospect.lastName}</td><td>{r.account.co?.name}</td><td>{r.nextTouch}</td><td><div className="row gap8"><div style={{width:80,height:5,background:"#e7e5e4",borderRadius:3}}><div style={{height:"100%",width:`${(r.done/r.total)*100}%`,background:"#d97706",borderRadius:3}}/></div><span>{r.done}/{r.total}</span></div></td><td>{fmtDue(r.dueDate)}</td><td style={{color:statusColor(status(r))}}>{status(r)}</td></tr>)}</tbody></table></div>) : <div className="box"><table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}><thead><tr style={{textAlign:"left",color:"#78716c"}}><th>Prospect</th><th>Company</th><th>Sequence Type</th><th>Touch</th><th>Progress</th><th>Next Due</th><th>Status</th></tr></thead><tbody>{filtered.map((r,i)=><tr key={i} style={{borderTop:"1px solid #e7e5e4"}}><td style={{padding:"8px 0"}}>{r.prospect.firstName} {r.prospect.lastName}</td><td>{r.account.co?.name}</td><td>{r.st.icon} {r.st.label}</td><td>{r.nextTouch}</td><td>{r.done}/{r.total}</td><td>{fmtDue(r.dueDate)}</td><td style={{color:statusColor(status(r))}}>{status(r)}</td></tr>)}</tbody></table></div>}
+                    </>;
+                  })()}
                 </>
               )}
             </div>
