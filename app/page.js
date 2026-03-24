@@ -657,68 +657,56 @@ export default function Home(){
 
           {view==="tracker"&&(
             <div className="fade">
-              <div style={{marginBottom:22}}><div className="eyebrow">SEQUENCE TRACKER</div><h2 className="serif" style={{fontSize:24,fontWeight:400,letterSpacing:"-.5px"}}>{tp?`${tp.firstName} ${tp.lastName}`:"Select a Prospect"}</h2>{tp&&<p style={{fontSize:11,color:"#5a5850",marginTop:4}}>{tp.title} · {co.name} · {(SEQ_TYPES.find(t=>t.id===tp.seqTypeId)||SEQ_TYPES[0]).label} · {(PERSONAS.find(p=>p.id===tp.personaId)||PERSONAS[0]).label}</p>}</div>
-              {prospects.length===0&&<div style={{textAlign:"center",padding:"48px 20px",color:"#5a5850"}}><div style={{fontSize:32,opacity:.3,marginBottom:12}}>▤</div><p style={{fontSize:13,marginBottom:14}}>Research prospects first, then generate their sequences here.</p><button onClick={()=>setView("research")} style={{padding:"9px 18px",borderRadius:7,background:"rgba(240,165,0,.12)",border:"1px solid rgba(240,165,0,.28)",color:"#f0a500",fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>Go to Research</button></div>}
-              {prospects.length>0&&(
-                <div className="row gap16" style={{alignItems:"flex-start"}}>
-                  <div style={{width:180,flexShrink:0}}>
-                    {prospects.map((p,i)=>(
-                      <div key={i} className={`tp${trackerPi===i?" on":""}`} onClick={()=>setTrackerPi(i)}>
-                        <div className="row gap8 mb8"><div className="av" style={{width:28,height:28,fontSize:11,background:`hsl(${i*55+180},50%,35%)`}}>{p.firstName[0]}{p.lastName?.[0]||""}</div><div style={{minWidth:0}}><div style={{fontSize:12,fontWeight:500,color:trackerPi===i?"#f0a500":"#e8e3d8",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.firstName} {p.lastName}</div><div style={{fontSize:10,color:"#5a5850",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.title}</div></div></div>
-                        {p.sequence?<><div className="between mb5"><span style={{fontSize:10,color:"#5a5850"}}>Progress</span><span style={{fontSize:10,color:"#4ade80",fontWeight:500}}>{doneCount(p)}/{totalT(p)}</span></div><div className="prog-bg"><div className="prog-fill" style={{width:`${(doneCount(p)/totalT(p))*100}%`}}/></div></>:<div style={{fontSize:10,color:"#5a5850",fontStyle:"italic"}}>No sequence yet</div>}
-                      </div>
-                    ))}
-                  </div>
-                  <div style={{flex:1}}>
-                    {tp===null&&<div style={{textAlign:"center",padding:"40px 20px",color:"#5a5850",fontSize:13}}>Select a prospect to view their sequence.</div>}
-                    {tp&&!tp.sequence&&<div className="box" style={{textAlign:"center",padding:"24px"}}><div style={{fontSize:28,marginBottom:12,opacity:.4}}>⟡</div><p style={{fontSize:13,color:"#5a5850",marginBottom:16,lineHeight:1.7}}>No sequence for {tp.firstName} yet.{tp.intel?" Ready to generate.":""}</p>{tp.intel&&<button onClick={()=>buildSeq(trackerPi)} disabled={tp.generating} style={{padding:"10px 22px",borderRadius:8,background:tp.generating?"rgba(255,255,255,.04)":"#f0a500",border:"none",color:tp.generating?"#5a5850":"#0a0a08",fontSize:12,fontWeight:500,cursor:tp.generating?"not-allowed":"pointer",fontFamily:"inherit",display:"inline-flex",alignItems:"center",gap:8}}>{tp.generating?<><span className="spin"/>GENERATING...</>:"GENERATE SEQUENCE"}</button>}{!tp.intel&&<button onClick={()=>{setActivePi(trackerPi);setView("research");setResTab("prospects");}} style={{padding:"10px 22px",borderRadius:8,background:"rgba(240,165,0,.12)",border:"1px solid rgba(240,165,0,.28)",color:"#f0a500",fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>RESEARCH THIS PROSPECT</button>}</div>}
-                    {tp&&tp.sequence&&(()=>{
-                      const st=SEQ_TYPES.find(t=>t.id===tp.seqTypeId)||SEQ_TYPES[0];
-                      const nxt=nextT(tp);
-                      return(<>
-                        {nxt&&(
-                          <div className="next-card mb14">
-                            <div className="between mb12"><div style={{fontSize:9,color:"#f0a500",letterSpacing:"3px",textTransform:"uppercase"}}>▶ NEXT TOUCH</div><div style={{fontSize:11,color:"#f0a500"}}>{nxt.daysFromPrev===0?"Send today":`${nxt.daysFromPrev} day${nxt.daysFromPrev!==1?"s":""} after previous`}</div></div>
-                            <div className="row gap12">
-                              <div style={{fontSize:22}}>{nxt.touch.icon}</div>
-                              <div style={{flex:1}}>
-                                <div className="row gap8 mb8"><span style={{fontSize:13,fontWeight:500}}>{nxt.touch.label}</span><span style={{fontSize:10,color:"#5a5850"}}>{nxt.touch.dl} · {nxt.touch.ch}</span></div>
-                                {nxt.content.subject&&<div style={{fontSize:12,color:"#f0a500",marginBottom:7,fontWeight:500}}>Subject: {nxt.content.subject}</div>}
-                                <div className="msg-body mb10">{nxt.content.body}</div>
-                                <div className="row gap8"><button className={`cpbtn${copied==="next_b"?" ok":""}`} onClick={()=>cp(nxt.content.body,"next_b")}>{copied==="next_b"?"COPIED":"COPY MESSAGE"}</button>{nxt.content.subject&&<button className={`cpbtn${copied==="next_a"?" ok":""}`} onClick={()=>cp(`Subject:${nxt.content.subject}\n\n${nxt.content.body}`,"next_a")}>{copied==="next_a"?"COPIED":"COPY BOTH"}</button>}<button onClick={()=>toggleTouch(trackerPi,nxt.touchId)} style={{marginLeft:"auto",padding:"6px 14px",borderRadius:7,background:"#4ade80",border:"none",color:"#0a0a08",fontSize:11,fontWeight:500,cursor:"pointer",fontFamily:"inherit",letterSpacing:".5px"}}>MARK DONE</button></div>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                        {!nxt&&<div style={{background:"rgba(74,222,128,.1)",border:"1px solid rgba(74,222,128,.4)",borderRadius:10,padding:"16px 18px",textAlign:"center",marginBottom:14}}><div style={{fontSize:22,marginBottom:8}}>🎉</div><div style={{fontSize:14,color:"#4ade80",fontWeight:500,marginBottom:4}}>All touches complete!</div><div style={{fontSize:12,color:"#5a5850"}}>Full {totalT(tp)}-touch sequence finished for {tp.firstName}.</div></div>}
-                        <div className="box">
-                          <div className="lbl">SEQUENCE TIMELINE</div>
-                          {st.steps.map((sid,idx)=>{
-                            const touch=TOUCHES.find(t=>t.id===sid);
-                            const content=tp.sequence[sid];
-                            const done=(tp.touchDone||{})[sid];
-                            const isNext=nxt?.touchId===sid;
-                            const date=(tp.touchDates||{})[sid];
-                            const note=(tp.touchNotes||{})[sid]||"";
-                            const outcome=(tp.touchOutcome||{})[sid]||"";
-                            const cs=CH[touch.ch];
-                            return(
-                              <div key={sid} className="tl-item">
-                                <div className="tl-spine"><div className={`cb${done?" done":""}`} onClick={()=>toggleTouch(trackerPi,sid)}>{done&&<span style={{color:"#0a0a08",fontSize:11,fontWeight:700}}>✓</span>}{!done&&isNext&&<span style={{color:"#f0a500",fontSize:10,animation:"pulse 1.5s infinite"}}>▶</span>}</div>{idx<st.steps.length-1&&<div className="tl-line" style={{background:done?"rgba(74,222,128,.4)":"#2a2924"}}/>}</div>
-                                <div className="tl-body" style={{opacity:done?0.55:1}}>
-                                  <div className="tl-hdr"><span style={{fontSize:14}}>{touch.icon}</span><span style={{fontSize:12,fontWeight:500,color:isNext?"#f0a500":done?"#4ade80":"#e8e3d8"}}>{touch.label}</span><span className="tag" style={{background:cs.bg,color:cs.tx,border:`1px solid ${cs.bd}`}}>{touch.dl}</span>{done&&date&&<span style={{fontSize:10,color:"#5a5850"}}>Done {fmt(date)}</span>}{isNext&&!done&&<span style={{fontSize:10,color:"#f0a500",animation:"pulse 1.5s infinite"}}>← NEXT</span>}</div>
-                                  {(isNext||done)&&content&&<div className="mb8">{content.subject&&<div style={{fontSize:11,color:"#f0a500",marginBottom:5}}>Subject: {content.subject}</div>}<div style={{fontSize:12,color:done?"#5a5850":"#e8e3d8",lineHeight:1.75,whiteSpace:"pre-wrap",background:"rgba(0,0,0,.2)",border:"1px solid #2a2924",borderRadius:6,padding:"9px 11px",maxHeight:120,overflowY:"auto"}}>{content.body}</div>{!done&&<div className="row gap6" style={{marginTop:7}}><button className={`cpbtn${copied===sid+"_b"?" ok":""}`} onClick={()=>cp(content.body,sid+"_b")}>{copied===sid+"_b"?"✓":"Copy"}</button>{content.subject&&<button className={`cpbtn${copied===sid+"_a"?" ok":""}`} onClick={()=>cp(`Subject:${content.subject}\n\n${content.body}`,sid+"_a")}>{copied===sid+"_a"?"✓ Both":"Copy Both"}</button>}</div>}</div>}
-                                  {done&&<div className="g2 gap8 mb8"><select value={outcome} onChange={e=>upP(trackerPi,"touchOutcome",{...(tp.touchOutcome||{}),[sid]:e.target.value})} style={{padding:"5px 8px",borderRadius:6,background:"var(--surf)",border:"1px solid var(--bd)",color:"#5a5850",fontSize:11,fontFamily:"inherit"}}><option value="">Outcome...</option><option>No response</option><option>Opened</option><option>Replied</option><option>Booked meeting</option><option>Not interested</option></select><input value={note} onChange={e=>upP(trackerPi,"touchNotes",{...(tp.touchNotes||{}),[sid]:e.target.value})} placeholder="Quick note..." style={{padding:"5px 8px",borderRadius:6,background:"var(--surf)",border:"1px solid var(--bd)",color:"#5a5850",fontSize:11,fontFamily:"inherit",width:"100%"}}/></div>}
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </>);
-                    })()}
-                  </div>
-                </div>
-              )}
+              {(()=>{
+                const pipeline = bobiAccounts.filter(a=>a.inPipeline);
+                const closedWon = bobiAccounts.filter(a=>a.stage==="Closed Won");
+                const stale = bobiAccounts.filter(a=>a.stale);
+                const atRisk = bobiAccounts.filter(a=>a.inPipeline && a.timing==="Cold");
+                const hotPipeline = bobiAccounts.filter(a=>a.inPipeline && a.timing==="Hot");
+                const stuckDiscovery = bobiAccounts.filter(a=>a.inPipeline && a.stage==="Discovery");
+                const attentionRows = bobiAccounts.map(a=>{
+                  let score = 0;
+                  if((a.prospects?.length||0)===0) score += 3;
+                  if(a.stale) score += 2;
+                  if(!a.coIntel) score += 1;
+                  if(a.timing==="Cold") score += 1;
+                  return {a,score};
+                }).sort((x,y)=>y.score-x.score).slice(0,10);
+                return (
+                  <>
+                    <div style={{marginBottom:16}}>
+                      <div className="eyebrow">TRACKER</div>
+                      <h2 className="serif" style={{fontSize:24,fontWeight:500}}>Pipeline Health Dashboard</h2>
+                      <p style={{fontSize:12,color:"#57534e"}}>Your Monday morning view — what needs attention this week</p>
+                    </div>
+                    <div className="row gap8 wrap-row mb14">
+                      <div className="stat-box"><div style={{fontSize:16,fontWeight:700}}>${pipeline.reduce((n,a)=>n+a.revenue,0).toLocaleString()}</div><div style={{fontSize:9,color:"#78716c"}}>Pipeline Value</div></div>
+                      <div className="stat-box"><div style={{fontSize:16,fontWeight:700,color:"#15803d"}}>${closedWon.reduce((n,a)=>n+a.revenue,0).toLocaleString()}</div><div style={{fontSize:9,color:"#78716c"}}>Closed Won</div></div>
+                      <div className="stat-box"><div style={{fontSize:16,fontWeight:700,color:"#b45309"}}>{stale.length}</div><div style={{fontSize:9,color:"#78716c"}}>Stale Accounts</div></div>
+                      <div className="stat-box"><div style={{fontSize:16,fontWeight:700,color:"#b91c1c"}}>{atRisk.length}</div><div style={{fontSize:9,color:"#78716c"}}>At Risk</div></div>
+                    </div>
+
+                    <div className="box mb12"><div className="lbl">Hot Pipeline — Close This Week</div>{hotPipeline.length?hotPipeline.map(a=><div key={a.id} className="tp"><div className="between"><strong>{a.co?.name}</strong><div className="row gap6"><span className="tag" style={{background:(stageCfg[a.stage]||stageCfg.Prospecting).bg,color:(stageCfg[a.stage]||stageCfg.Prospecting).color}}>{a.stage}</span><span className="tag" style={{background:"rgba(239,68,68,.12)",color:"#b91c1c"}}>{a.timing}</span></div></div><div style={{fontSize:11,color:"#78716c"}}>${a.revenue.toLocaleString()}</div></div>):<p style={{fontSize:12,color:"#78716c"}}>No hot pipeline accounts.</p>}</div>
+
+                    <div className="box mb12"><div className="lbl">Stale Accounts — Re-engage Now</div>{stale.length?stale.map(a=><div key={a.id} className="tp"><div className="between"><strong>{a.co?.name}</strong><button className="cpbtn" onClick={()=>{loadAcct(a);setView("research");}}>Open</button></div><div style={{fontSize:11,color:"#78716c"}}>{a.co?.industry||"—"} · ${a.revenue.toLocaleString()} · {a.stage}</div><span className="tag" style={{background:"rgba(180,83,9,.12)",color:"#b45309"}}>30+ days no activity</span></div>):<p style={{fontSize:12,color:"#78716c"}}>No stale accounts.</p>}</div>
+
+                    <div className="box mb12"><div className="lbl">Stuck in Discovery — Push Forward</div>{stuckDiscovery.length?stuckDiscovery.map(a=><div key={a.id} className="tp"><div className="between"><strong>{a.co?.name}</strong><span>${a.revenue.toLocaleString()}</span></div><div style={{fontSize:11,color:"#78716c"}}>{a.timing} · {a.prospects?.length||0} prospects</div></div>):<p style={{fontSize:12,color:"#78716c"}}>No discovery-stage blockers.</p>}</div>
+
+                    <div className="box mb12">
+                      <div className="lbl">Top 10 Accounts Needing Attention</div>
+                      <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+                        <thead><tr style={{textAlign:"left",color:"#78716c"}}><th>#</th><th>Company</th><th>Industry</th><th>Revenue</th><th>Stage</th><th>Timing</th><th>Prospects</th><th>Action</th></tr></thead>
+                        <tbody>{attentionRows.map(({a,score},i)=><tr key={a.id} style={{borderTop:"1px solid #e7e5e4"}}><td style={{padding:"8px 0"}}>{i+1}</td><td>{a.co?.name}</td><td>{a.co?.industry||"—"}</td><td>${a.revenue.toLocaleString()}</td><td>{a.stage}</td><td>{a.timing}</td><td>{a.prospects?.length||0}</td><td>{(a.prospects?.length||0)===0?<button className="cpbtn">+ Add Stakeholder</button>:a.stale?<button className="cpbtn">Re-engage</button>:<button className="cpbtn">Research</button>} <span style={{fontSize:10,color:"#a8a29e"}}>S{score}</span></td></tr>)}</tbody>
+                      </table>
+                    </div>
+
+                    <div className="box">
+                      <div className="lbl">Stage Progression</div>
+                      {stageOrder.map(s=>{const rows=bobiAccounts.filter(a=>a.stage===s);const rev=rows.reduce((n,a)=>n+a.revenue,0);return <div key={s} className="between mb8"><span>{s}</span><div className="row gap8"><div style={{width:160,height:6,background:"#e7e5e4",borderRadius:4}}><div style={{height:"100%",width:`${Math.min(100,rows.length*12)}%`,background:(stageCfg[s]||stageCfg.Prospecting).color,borderRadius:4}}/></div><span style={{fontSize:11,color:"#78716c"}}>{rows.length} · ${rev.toLocaleString()}</span></div></div>;})}
+                    </div>
+                  </>
+                );
+              })()}
             </div>
           )}
 
