@@ -184,6 +184,10 @@ export default function Home(){
   const [geminiInput,setGeminiInput]=useState("");
   const [autoResearchingCo,setAutoResearchingCo]=useState(false);
   const [humanizingStep,setHumanizingStep]=useState(null);
+  const [bobiTab,setBobiTab]=useState("accounts");
+  const [bobiStageFilter,setBobiStageFilter]=useState("all");
+  const [bobiSearch,setBobiSearch]=useState("");
+  const [bobiDetailId,setBobiDetailId]=useState(null);
 
   const ref=useRef({});
   ref.current={co,coIntel,prospects,acctStatus,acctNotes};
@@ -403,11 +407,102 @@ export default function Home(){
   const navs=[
     {id:"home",    icon:"◆",label:"Home"},
     {id:"settings",icon:"⚙",label:"Settings", badge:!geminiKey?"!":null,bc:"#f87171"},
-    {id:"accounts",icon:"⊞",label:"Accounts", badge:accounts.length||null,bc:"#4ade80"},
+    {id:"bobi",icon:"⊞",label:"BoBi", badge:accounts.length||null,bc:"#4ade80"},
     {id:"research",icon:"◎",label:"Research",  badge:coIntel?"✓":null,bc:"#60a5fa"},
     {id:"tracker", icon:"▤",label:"Tracker",   badge:prospects.filter(p=>p.sequence).length||null,bc:"#f0a500"},
     {id:"sequence",icon:"⟡",label:"Sequence",  badge:generated?"✓":null,bc:"#f0a500"},
   ];
+
+  const stageCfg = {
+    Prospecting:{color:"#64748b",bg:"rgba(100,116,139,.12)"},
+    Discovery:{color:"#1d4ed8",bg:"rgba(29,78,216,.12)"},
+    Proposal:{color:"#b45309",bg:"rgba(180,83,9,.12)"},
+    Negotiation:{color:"#6d28d9",bg:"rgba(109,40,217,.12)"},
+    "Closed Won":{color:"#15803d",bg:"rgba(21,128,61,.12)"},
+    "Closed Lost":{color:"#b91c1c",bg:"rgba(185,28,28,.12)"},
+  };
+  const stageOrder = ["Prospecting","Discovery","Proposal","Negotiation","Closed Won","Closed Lost"];
+  const bobiAccounts = accounts.map(a=>({
+    ...a,
+    stage: a.stage || "Prospecting",
+    timing: a.coIntel?.timingScore || "Cold",
+    revenue: Number(a.revenue || 0),
+    region: a.region || "NA",
+    inPipeline: !["Closed Won","Closed Lost"].includes(a.stage || "Prospecting"),
+    stale: (Date.now()-new Date(a.updatedAt||Date.now()).getTime()) > 1000*60*60*24*30,
+  }));
+  const filteredBoBi = bobiAccounts.filter(a=>{
+    const byStage = bobiStageFilter==="all" || a.stage===bobiStageFilter;
+    const q=bobiSearch.trim().toLowerCase();
+    const bySearch=!q||`${a.co?.name||""} ${a.co?.industry||""} ${a.region}`.toLowerCase().includes(q);
+    return byStage && bySearch;
+  });
+  const totalRevenue = bobiAccounts.reduce((n,a)=>n+a.revenue,0);
+  const selectedBoBi = bobiAccounts.find(a=>a.id===bobiDetailId) || null;
+
+  function buildBoBi(){
+    const pipeline = bobiAccounts.filter(a=>a.inPipeline);
+    const hot = bobiAccounts.filter(a=>a.timing==="Hot");
+    const stale = bobiAccounts.filter(a=>a.stale);
+    const byStageCount = stage => bobiAccounts.filter(a=>a.stage===stage);
+    const tabBtn = (id,label)=><button className={`ppill${bobiTab===id?" on":""}`} onClick={()=>setBobiTab(id)}>{label}</button>;
+    return (
+      <div className="fade">
+        <div className="between mb16">
+          <div><div className="eyebrow">BOOK OF BUSINESS</div><h2 className="serif" style={{fontSize:26,fontWeight:500}}>BoBi</h2></div>
+          <div className="row gap8"><button className="cpbtn" onClick={()=>window.alert("CSV/Excel upload coming next.")}>Upload CSV/Excel</button><button className="cpbtn pri" onClick={()=>setView("research")}>+ Add Account</button></div>
+        </div>
+        <div className="row gap8 wrap-row mb12">
+          <div className="stat-box"><div style={{fontSize:16,fontWeight:700}}>{bobiAccounts.length}</div><div style={{fontSize:9,color:"#78716c"}}>Total Accounts</div></div>
+          <div className="stat-box"><div style={{fontSize:16,fontWeight:700}}>{pipeline.length}</div><div style={{fontSize:9,color:"#78716c"}}>In Pipeline</div></div>
+          <div className="stat-box"><div style={{fontSize:16,fontWeight:700,color:"#ef4444"}}>{hot.length}</div><div style={{fontSize:9,color:"#78716c"}}>Hot Timing</div></div>
+          <div className="stat-box"><div style={{fontSize:16,fontWeight:700,color:"#b45309"}}>{stale.length}</div><div style={{fontSize:9,color:"#78716c"}}>Stale</div></div>
+          <div className="stat-box"><div style={{fontSize:16,fontWeight:700}}>${totalRevenue.toLocaleString()}</div><div style={{fontSize:9,color:"#78716c"}}>Total Revenue</div></div>
+        </div>
+        <div className="row gap8 wrap-row mb12">
+          {tabBtn("accounts","Accounts Table")}
+          {tabBtn("opps","Opportunities")}
+          {tabBtn("pipeline","Pipeline")}
+          {tabBtn("segments","Segments")}
+        </div>
+
+        {bobiTab==="accounts"&&<div className="box">
+          <div className="between mb10">
+            <div className="row gap6 wrap-row">{["all",...stageOrder].map(s=>{const cfg=stageCfg[s]||{color:"#6b7280",bg:"rgba(107,114,128,.12)"};return <button key={s} className={`ppill${bobiStageFilter===s?" on":""}`} onClick={()=>setBobiStageFilter(s)} style={{background:bobiStageFilter===s?cfg.bg:"transparent",borderColor:cfg.color,color:cfg.color}}>{s==="all"?"All Stages":s}</button>;})}</div>
+            <input className="fi" style={{maxWidth:240}} placeholder="Search accounts..." value={bobiSearch} onChange={e=>setBobiSearch(e.target.value)} />
+          </div>
+          <div style={{overflowX:"auto"}}>
+            <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+              <thead><tr style={{textAlign:"left",color:"#78716c"}}><th>Company</th><th>Industry</th><th>Region</th><th>Revenue</th><th>Stage</th><th>Timing</th><th>Prospects</th><th>Intel</th></tr></thead>
+              <tbody>{filteredBoBi.map(a=>{const cfg=stageCfg[a.stage]||stageCfg.Prospecting;return <tr key={a.id} onClick={()=>setBobiDetailId(a.id)} style={{cursor:"pointer",borderTop:"1px solid #e7e5e4"}}><td style={{padding:"8px 0"}}>{a.co?.name||"—"}</td><td>{a.co?.industry||"—"}</td><td>{a.region}</td><td>${a.revenue.toLocaleString()}</td><td><span className="tag" style={{background:cfg.bg,color:cfg.color}}>{a.stage}</span></td><td>{a.timing}</td><td>{a.prospects?.length||0}</td><td>{a.coIntel?"✓":"—"}</td></tr>;})}</tbody>
+            </table>
+          </div>
+        </div>}
+
+        {bobiTab==="opps"&&<div className="g2">
+          <div className="box"><div className="lbl">Hot Accounts</div>{hot.filter(a=>a.inPipeline).map(a=><div key={a.id} className="tp"><div className="between"><strong>{a.co?.name}</strong><span>${a.revenue.toLocaleString()}</span></div><div style={{fontSize:11,color:"#78716c"}}>{a.co?.industry||"—"} · {a.stage}</div></div>)}</div>
+          <div className="box"><div className="lbl">Stale Accounts</div>{stale.map(a=><div key={a.id} className="tp"><div className="between"><strong>{a.co?.name}</strong><span className="tag" style={{background:"rgba(239,68,68,.12)",color:"#b91c1c"}}>Re-engage</span></div><div style={{fontSize:11,color:"#78716c"}}>30+ days no activity</div></div>)}</div>
+        </div>}
+
+        {bobiTab==="pipeline"&&<div className="g3">{stageOrder.map(stage=>{const rows=byStageCount(stage);return <div key={stage} className="box"><div className="between mb8"><strong>{stage}</strong><span style={{fontSize:11,color:"#78716c"}}>{rows.length} · ${rows.reduce((n,a)=>n+a.revenue,0).toLocaleString()}</span></div>{rows.map(a=><div key={a.id} className="tp"><div style={{fontWeight:600}}>{a.co?.name}</div><div className="between"><span style={{fontSize:11,color:"#78716c"}}>${a.revenue.toLocaleString()}</span><span className="tag" style={{background:a.timing==="Hot"?"rgba(239,68,68,.12)":"rgba(245,158,11,.12)",color:a.timing==="Hot"?"#b91c1c":"#b45309"}}>{a.timing}</span></div></div>)}</div>;})}</div>}
+
+        {bobiTab==="segments"&&<div className="g2">
+          <div className="box"><div className="lbl">By Industry</div>{Object.entries(bobiAccounts.reduce((m,a)=>{const k=a.co?.industry||"Unknown";m[k]=(m[k]||0)+1;return m;},{})).map(([k,v])=><div key={k} className="between mb8"><span>{k}</span><div style={{display:"flex",alignItems:"center",gap:8}}><div style={{width:120,height:6,background:"#e7e5e4",borderRadius:4}}><div style={{height:"100%",width:`${Math.min(100,v*15)}%`,background:"#d97706",borderRadius:4}}/></div><span>{v}</span></div></div>)}</div>
+          <div className="box"><div className="lbl">By Stage</div>{stageOrder.map(s=>{const count=byStageCount(s).length;const rev=byStageCount(s).reduce((n,a)=>n+a.revenue,0);return <div key={s} className="between mb8"><span>{s}</span><span>{count} · ${rev.toLocaleString()}</span></div>;})}</div>
+        </div>}
+
+        {selectedBoBi&&<div style={{position:"fixed",top:0,right:0,width:420,maxWidth:"92vw",height:"100vh",background:"#fff",borderLeft:"1px solid #e7e5e4",padding:20,overflowY:"auto",zIndex:500}}>
+          <div className="between mb10"><h3 className="serif" style={{fontSize:22}}>{selectedBoBi.co?.name}</h3><button className="cpbtn" onClick={()=>setBobiDetailId(null)}>Close</button></div>
+          <div className="row gap8 mb10"><span className="tag" style={{background:(stageCfg[selectedBoBi.stage]||stageCfg.Prospecting).bg,color:(stageCfg[selectedBoBi.stage]||stageCfg.Prospecting).color}}>{selectedBoBi.stage}</span><span className="tag" style={{background:"rgba(245,158,11,.12)",color:"#b45309"}}>{selectedBoBi.timing}</span><span className="tag">${selectedBoBi.revenue.toLocaleString()}</span></div>
+          <div className="box mb10"><div className="lbl">Deal Info</div><div style={{fontSize:12,lineHeight:1.8}}>Industry: {selectedBoBi.co?.industry||"—"}<br/>Region: {selectedBoBi.region}<br/>Website: {selectedBoBi.co?.website||"—"}<br/>Prospects: {selectedBoBi.prospects?.length||0}</div></div>
+          <div className="box mb10"><div className="lbl">Deal Stage</div><select value={selectedBoBi.stage} onChange={e=>patchAcct(selectedBoBi.id,"stage",e.target.value)} className="fi">{stageOrder.map(s=><option key={s}>{s}</option>)}</select></div>
+          <div className="box mb10"><div className="lbl">Account Snapshot</div><p style={{fontSize:12,color:"#57534e"}}>{selectedBoBi.coIntel?.snapshot||"No snapshot yet."}</p></div>
+          <div className="box mb10"><div className="lbl">Prospects</div>{(selectedBoBi.prospects||[]).length?selectedBoBi.prospects.map((p,i)=><div key={i} className="tp">{p.firstName} {p.lastName} · {p.title}</div>):<p style={{fontSize:12,color:"#78716c"}}>No prospects added.</p>}</div>
+          <div className="box"><div className="lbl">Activity Log</div><p style={{fontSize:12,color:"#78716c"}}>Updated {fmt(selectedBoBi.updatedAt)}</p></div>
+        </div>}
+      </div>
+    );
+  }
 
   return(
     <div className="app">
@@ -473,17 +568,11 @@ export default function Home(){
                 <p style={{fontSize:13,color:"#5a5850",maxWidth:420,lineHeight:1.9}}>Research accounts. Profile stakeholders. Generate personalized sequences. Track every touch. The deal is won before the first message.</p>
               </div>
               {profileDone&&<div className="am-chip row gap12 mb20"><div style={{fontSize:11,color:"#f0a500",textTransform:"uppercase",letterSpacing:"2px"}}>◆</div><div style={{flex:1}}><div style={{fontSize:11,color:"#f0a500",letterSpacing:"1.5px",textTransform:"uppercase",marginBottom:2}}>{seller.yourName||"You"} · {seller.yourCompany}</div><div style={{fontSize:13}}>{seller.problemSolved}</div></div><button onClick={()=>setShowProfile(true)} style={{padding:"5px 10px",borderRadius:6,background:"transparent",border:"1px solid rgba(255,255,255,.07)",color:"#5a5850",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>EDIT</button></div>}
-              <div className="g4">{[{id:"accounts",icon:"⊞",label:"Accounts",desc:`${accounts.length} saved`,c:"#4ade80"},{id:"research",icon:"◎",label:"Research Hub",desc:"Companies + stakeholders",c:"#60a5fa"},{id:"tracker",icon:"▤",label:"Sequence Tracker",desc:"Track & execute touches",c:"#f0a500"},{id:"sequence",icon:"⟡",label:"SequenceAI",desc:"Generate sequences",c:"#f0a500"}].map(h=><div key={h.id} onClick={()=>setView(h.id)} className="box" style={{cursor:"pointer",transition:"all .18s"}} onMouseEnter={e=>{e.currentTarget.style.borderColor=h.c+"50";e.currentTarget.style.transform="translateY(-2px)";}} onMouseLeave={e=>{e.currentTarget.style.borderColor="rgba(255,255,255,.07)";e.currentTarget.style.transform="none";}}><div style={{fontSize:20,marginBottom:10,color:h.c}}>{h.icon}</div><div style={{fontSize:13,fontWeight:500,marginBottom:4}}>{h.label}</div><div style={{fontSize:11,color:"#5a5850",lineHeight:1.5}}>{h.desc}</div></div>)}</div>
+              <div className="g4">{[{id:"bobi",icon:"⊞",label:"BoBi",desc:`${accounts.length} accounts`,c:"#4ade80"},{id:"research",icon:"◎",label:"Research Hub",desc:"Companies + stakeholders",c:"#60a5fa"},{id:"tracker",icon:"▤",label:"Sequence Tracker",desc:"Track & execute touches",c:"#f0a500"},{id:"sequence",icon:"⟡",label:"SequenceAI",desc:"Generate sequences",c:"#f0a500"}].map(h=><div key={h.id} onClick={()=>setView(h.id)} className="box" style={{cursor:"pointer",transition:"all .18s"}} onMouseEnter={e=>{e.currentTarget.style.borderColor=h.c+"50";e.currentTarget.style.transform="translateY(-2px)";}} onMouseLeave={e=>{e.currentTarget.style.borderColor="rgba(255,255,255,.07)";e.currentTarget.style.transform="none";}}><div style={{fontSize:20,marginBottom:10,color:h.c}}>{h.icon}</div><div style={{fontSize:13,fontWeight:500,marginBottom:4}}>{h.label}</div><div style={{fontSize:11,color:"#5a5850",lineHeight:1.5}}>{h.desc}</div></div>)}</div>
             </div>
           )}
 
-          {view==="accounts"&&(
-            <div className="fade">
-              <div className="between mb24"><div><div className="eyebrow">SAVED ACCOUNTS</div><h2 className="serif" style={{fontSize:26,fontWeight:400,letterSpacing:"-.5px"}}>{accounts.length} Account{accounts.length!==1?"s":""}</h2></div><button onClick={()=>{setCo({name:"",industry:"",website:""});setCoIntel(null);setProspects([]);setActivePi(null);setAcctStatus("researching");setAcctNotes("");setView("research");setResTab("company");}} style={{padding:"7px 14px",borderRadius:7,background:"#f0a500",border:"none",color:"#0a0a08",fontSize:11,fontWeight:500,cursor:"pointer",fontFamily:"inherit",letterSpacing:".5px"}}>+ NEW ACCOUNT</button></div>
-              {accounts.length===0&&<div style={{textAlign:"center",padding:"56px 20px",color:"#5a5850"}}><div style={{fontSize:36,marginBottom:14,opacity:.3}}>⊞</div><p style={{fontSize:13,marginBottom:16}}>No accounts yet.</p><button onClick={()=>setView("research")} style={{padding:"9px 20px",borderRadius:7,background:"rgba(240,165,0,.12)",border:"1px solid rgba(240,165,0,.28)",color:"#f0a500",fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>Research First Account</button></div>}
-              {accounts.length>0&&<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(270px,1fr))",gap:12}}>{accounts.map(a=>{const st=STATUSES.find(s=>s.id===a.status)||STATUSES[0];const np=a.prospects?.length||0;const ni=a.prospects?.filter(p=>p.intel).length||0;const ns=a.prospects?.filter(p=>p.sequence).length||0;return(<div key={a.id} className="box" style={{cursor:"pointer",transition:"border-color .18s"}} onClick={()=>loadAcct(a)} onMouseEnter={e=>e.currentTarget.style.borderColor="rgba(240,165,0,.4)"} onMouseLeave={e=>e.currentTarget.style.borderColor="rgba(255,255,255,.07)"}><div className="between mb10"><div style={{flex:1,minWidth:0}}><div className="serif" style={{fontSize:16,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.co?.name}</div><div style={{fontSize:11,color:"#5a5850"}}>{a.co?.industry||"—"}</div></div><button onClick={e=>delAcct(a.id,e)} style={{background:"none",border:"none",color:"#5a5850",cursor:"pointer",fontSize:13,padding:"2px 5px",flexShrink:0}}>✕</button></div><div className="g4 mb10"><div className="stat-box"><div style={{fontSize:15,fontWeight:600,color:a.coIntel?.timingScore==="Hot"?"#f87171":a.coIntel?.timingScore==="Warm"?"#f0a500":"#5a5850",marginBottom:2}}>{a.coIntel?.timingScore||"—"}</div><div style={{fontSize:8,color:"#5a5850",textTransform:"uppercase",letterSpacing:"1.5px"}}>TIMING</div></div><div className="stat-box"><div style={{fontSize:15,fontWeight:600,color:"#60a5fa",marginBottom:2}}>{np}</div><div style={{fontSize:8,color:"#5a5850",textTransform:"uppercase",letterSpacing:"1.5px"}}>PROSPECTS</div></div><div className="stat-box"><div style={{fontSize:15,fontWeight:600,color:"#4ade80",marginBottom:2}}>{ni}</div><div style={{fontSize:8,color:"#5a5850",textTransform:"uppercase",letterSpacing:"1.5px"}}>PROFILED</div></div><div className="stat-box"><div style={{fontSize:15,fontWeight:600,color:"#f0a500",marginBottom:2}}>{ns}</div><div style={{fontSize:8,color:"#5a5850",textTransform:"uppercase",letterSpacing:"1.5px"}}>IN SEQ</div></div></div><div className="row gap8 mb8"><select value={a.status||"researching"} onClick={e=>e.stopPropagation()} onChange={e=>{e.stopPropagation();patchAcct(a.id,"status",e.target.value);}} style={{flex:1,padding:"5px 8px",borderRadius:6,background:`${st.color}12`,border:`1px solid ${st.color}30`,color:st.color,fontSize:11,fontFamily:"inherit"}}>{STATUSES.map(s=><option key={s.id} value={s.id}>{s.label}</option>)}</select><span style={{fontSize:10,color:"#5a5850",flexShrink:0}}>{fmt(a.updatedAt)}</span></div><textarea value={a.notes||""} onClick={e=>e.stopPropagation()} onChange={e=>{e.stopPropagation();patchAcct(a.id,"notes",e.target.value);}} placeholder="Notes..." rows={2} style={{width:"100%",padding:"6px 9px",borderRadius:6,background:"rgba(0,0,0,.2)",border:"1px solid rgba(255,255,255,.07)",color:"#5a5850",fontSize:11,fontFamily:"inherit",resize:"none",lineHeight:1.5}}/><div style={{marginTop:9,fontSize:11,color:"#f0a500",letterSpacing:".5px"}}>OPEN & RESUME →</div></div>);})}</div>}
-            </div>
-          )}
+          {view==="bobi"&&buildBoBi()}
 
           {view==="research"&&(
             <div className="fade">
