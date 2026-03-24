@@ -547,7 +547,7 @@ export default function Home(){
               {n.badge!=null&&<span className="tag" style={{background:`${n.bc}18`,color:n.bc,fontSize:9}}>{n.badge}</span>}
             </div>
           ))}
-          {view==="research"&&<div className="snav">{["company","prospects","brief"].map(t=><div key={t} className={`sni${resTab===t?" on":""}`} onClick={()=>setResTab(t)}>{t.charAt(0).toUpperCase()+t.slice(1)}</div>)}</div>}
+          
           {view==="sequence"&&<div className="snav">{["build","results"].map(t=><div key={t} className={`sni${seqTab===t?" on":""}`} onClick={()=>{if(t==="results"&&!generated)return;setSeqTab(t);}} style={{opacity:t==="results"&&!generated?0.35:1}}>{t.charAt(0).toUpperCase()+t.slice(1)}</div>)}</div>}
           {view==="tracker"&&prospects.length>0&&<div className="snav">{prospects.map((p,i)=><div key={i} className={`sni${trackerPi===i?" on":""}`} onClick={()=>setTrackerPi(i)}><div className="av" style={{width:16,height:16,fontSize:8,background:`hsl(${i*55+180},50%,40%)`}}>{p.firstName[0]}</div><span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.firstName} {p.lastName}</span>{p.sequence&&<span style={{marginLeft:"auto",fontSize:9,color:"#4ade80",flexShrink:0}}>{doneCount(p)}/{totalT(p)}</span>}</div>)}</div>}
         </div>
@@ -576,100 +576,82 @@ export default function Home(){
 
           {view==="research"&&(
             <div className="fade">
-              {resTab==="company"&&(
-                <>
-                  <div className="between mb20"><div><div className="eyebrow">RESEARCH HUB</div><h2 className="serif" style={{fontSize:24,fontWeight:400,letterSpacing:"-.5px"}}>Company Research</h2>{profileDone&&<p style={{fontSize:11,color:"#5a5850",marginTop:4}}>Tailored to: &quot;{seller.problemSolved.slice(0,50)}...&quot;</p>}</div>{co.name&&<div className="row gap8"><select value={acctStatus} onChange={e=>setAcctStatus(e.target.value)} style={{padding:"5px 8px",borderRadius:6,background:"var(--surf)",border:"1px solid var(--bd)",color:"var(--tx)",fontSize:11,fontFamily:"inherit"}}>{STATUSES.map(s=><option key={s.id} value={s.id}>{s.label}</option>)}</select><AB onClick={save} color="#4ade80" sm>{savedMsg||"Save"}</AB></div>}</div>
-                  {profileDone&&<div className="am-chip row gap10 mb14"><span style={{fontSize:11,color:"#f0a500"}}>◆</span><span style={{fontSize:11,color:"#f0a500",flex:1}}>{seller.problemSolved.slice(0,65)}{seller.problemSolved.length>65?"...":""}</span><button onClick={()=>setShowProfile(true)} style={{fontSize:9,color:"#5a5850",background:"none",border:"none",cursor:"pointer",fontFamily:"inherit",letterSpacing:"1.5px"}}>EDIT</button></div>}
-                  <div className="box mb12"><div className="lbl">TARGET ACCOUNT</div><div className="g3"><Fld label="Company *" value={co.name} onChange={e=>setCo(c=>({...c,name:e.target.value}))} ph="Acme Corp"/><Fld label="Industry" value={co.industry} onChange={e=>setCo(c=>({...c,industry:e.target.value}))} ph="SaaS / FinTech"/><Fld label="Website" value={co.website} onChange={e=>setCo(c=>({...c,website:e.target.value}))} ph="acme.com"/></div><div style={{marginTop:10}}><div className="fl" style={{marginBottom:6}}>Industry templates</div><div className="row gap6 wrap-row">{INDUSTRY_TEMPLATES.map(ind=><button key={ind} type="button" onClick={()=>setCo(c=>({...c,industry:ind}))} className="ppill" style={{marginBottom:4}}>{ind}</button>)}</div></div></div>
-                  <div className="box mb12" style={{borderColor:"rgba(240,165,0,.3)"}}>
-                    <div className="lbl" style={{color:"#f0a500"}}>AUTO RESEARCH — LIVE WEB</div>
-                    <p style={{fontSize:11,color:"#5a5850",marginBottom:12,lineHeight:1.6}}>Claude will search the live web and return structured intel automatically. No copy-paste needed.</p>
-                    <button onClick={autoResearchCo} disabled={autoResearchingCo||!co.name||!profileDone} style={{width:"100%",padding:"11px",borderRadius:8,background:autoResearchingCo||!co.name?"rgba(255,255,255,.04)":"linear-gradient(135deg,rgba(240,165,0,.2),rgba(240,165,0,.1))",border:"1px solid rgba(240,165,0,.4)",color:autoResearchingCo||!co.name?"#5a5850":"#f0a500",fontSize:12,fontWeight:500,cursor:autoResearchingCo||!co.name?"not-allowed":"pointer",fontFamily:"inherit",letterSpacing:".5px",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
-                      {autoResearchingCo?<><span className="spin"/>SEARCHING THE WEB...</>:"⚡ AUTO RESEARCH THE WEB"}
-                    </button>
-                  </div>
-                  <div className="box mb12"><div className="lbl">STEP 1 — GENERATE QUERY</div><AB onClick={getCoQ} loading={loadingCQ} disabled={loadingCQ||!co.name||!profileDone} color="#60a5fa">{loadingCQ?"Generating...":"Generate Company Query"}</AB>{coQuery&&<QBox query={coQuery} copied={cqCopied} onCopy={()=>{navigator.clipboard.writeText(coQuery);setCqCopied(true);setTimeout(()=>setCqCopied(false),2000)}} color="#60a5fa"/>}</div>
-                  <div className="box mb12"><div className="lbl">INDUSTRY TRENDS QUERY</div><p style={{fontSize:11,color:"#5a5850",marginBottom:10,lineHeight:1.6}}>Search for macro trends in {co.industry||seller.sellerIndustry||"their industry"}.</p><AB onClick={getTrendQ} loading={loadingTQ} disabled={loadingTQ||!co.name||!profileDone} color="#c084fc">{loadingTQ?"Generating...":"Get Industry Trends Query"}</AB>{trendQuery&&<QBox query={trendQuery} copied={tqCopied} onCopy={()=>{navigator.clipboard.writeText(trendQuery);setTqCopied(true);setTimeout(()=>setTqCopied(false),2000)}} color="#c084fc"/>}</div>
-                  <div className="box mb12"><div className="lbl">STEP 2 — PASTE & ANALYZE</div><textarea className="paste" value={coPasted} onChange={e=>setCoPasted(e.target.value)} placeholder="Paste company research — news, funding, job postings, product launches..." rows={5}/>{coPasted&&<div style={{fontSize:10,color:"#4ade80",marginTop:3}}>✓ {coPasted.split(/\s+/).filter(Boolean).length} words</div>}{err&&<div className="err">{err}</div>}<AB onClick={analyzeComp} loading={analyzingCo} disabled={analyzingCo||!coPasted.trim()} color="#60a5fa" style={{marginTop:10}}>{analyzingCo?"Analyzing...":"Analyze Change Agents"}</AB></div>
-                  {co.name&&<div className="box mb12"><div className="lbl">ACCOUNT NOTES</div><textarea className="ta" value={acctNotes} onChange={e=>setAcctNotes(e.target.value)} placeholder="Internal notes..." rows={2}/></div>}
-                  {coIntel&&(
-                    <div className="fade">
-                      <div className="row gap12 mb12">
-                        <div className="box" style={{flex:1}}><div className="lbl" style={{color:"#60a5fa"}}>SNAPSHOT</div><p style={{fontSize:13,lineHeight:1.8,color:"#bfdbfe",marginBottom:9}}>{coIntel.snapshot}</p><p style={{fontSize:12,color:"#f0a500",fontStyle:"italic",margin:0}}>◆ {coIntel.buyingSignals}</p></div>
-                        <div className="box" style={{border:`2px solid ${coIntel.timingScore==="Hot"?"#f87171":coIntel.timingScore==="Warm"?"#f0a500":"#5a5850"}`,textAlign:"center",minWidth:108,padding:"14px 12px"}}><div style={{fontSize:9,color:"#5a5850",textTransform:"uppercase",letterSpacing:"2px",marginBottom:5}}>TIMING</div><div className="serif" style={{fontSize:22,color:coIntel.timingScore==="Hot"?"#f87171":coIntel.timingScore==="Warm"?"#f0a500":"#5a5850",marginBottom:4}}>{coIntel.timingScore}</div><div style={{fontSize:10,color:"#5a5850",lineHeight:1.5}}>{coIntel.timingReason}</div></div>
-                      </div>
-                      <div className="g2 mb14">{CHANGE_AGENTS.map(ca=>{const items=coIntel[ca.key]||[];if(!items.length)return null;return <ICard key={ca.key} ca={ca} items={items}/>;})}</div>
-                      <button onClick={()=>setResTab("prospects")} style={{width:"100%",padding:"11px",borderRadius:8,background:"#60a5fa",border:"none",color:"#fff",fontSize:12,fontWeight:500,cursor:"pointer",fontFamily:"inherit",letterSpacing:".5px"}}>ADD PROSPECTS →</button>
+              <div className="between mb14">
+                <div>
+                  <div className="eyebrow">RESEARCH</div>
+                  <h2 className="serif" style={{fontSize:24,fontWeight:500}}>Account Intelligence</h2>
+                </div>
+              </div>
+
+              <div className="row gap8 wrap-row mb14">
+                {accounts.map(a=><button key={a.id} className={`ppill${co.name===a.co?.name?" on":""}`} onClick={()=>loadAcct(a)}>{a.co?.name||"Untitled"}</button>)}
+                <button className="ppill" onClick={()=>setView("bobi")}>+ New Account</button>
+              </div>
+
+              {coIntel?(
+                <div className="box mb14">
+                  <div className="lbl" style={{color:"#d97706"}}>◆ Account Snapshot</div>
+                  <div className="row gap12 mb10">
+                    <div style={{minWidth:110,padding:"12px",borderRadius:8,border:`1px solid ${coIntel.timingScore==="Hot"?"#fca5a5":coIntel.timingScore==="Warm"?"#fcd34d":"#d6d3d1"}`,textAlign:"center"}}>
+                      <div style={{fontSize:9,color:"#78716c",letterSpacing:"2px",textTransform:"uppercase"}}>Timing</div>
+                      <div className="serif" style={{fontSize:20,color:coIntel.timingScore==="Hot"?"#b91c1c":coIntel.timingScore==="Warm"?"#b45309":"#57534e"}}>{coIntel.timingScore}</div>
                     </div>
-                  )}
-                </>
-              )}
-              {resTab==="prospects"&&(
-                <>
-                  <div style={{marginBottom:22}}><div className="eyebrow">RESEARCH HUB</div><h2 className="serif" style={{fontSize:24,fontWeight:400,letterSpacing:"-.5px"}}>Prospect Profiles</h2><p style={{fontSize:11,color:"#5a5850",marginTop:4}}>Stakeholders at {co.name||"target account"}</p></div>
-                  <div className="row gap8 mb14 wrap-row">
-                    {prospects.map((p,i)=><button key={i} onClick={()=>setActivePi(i)} className={`ppill${activePi===i?" on":""}`}>{p.firstName} {p.lastName}{p.intel&&<span style={{color:"#4ade80",fontSize:9}}>✓</span>}</button>)}
-                    <button onClick={()=>setAddingP(true)} className="ppill">+ Add</button>
+                    <p style={{fontSize:13,lineHeight:1.8,color:"#44403c",margin:0,flex:1}}>{coIntel.snapshot}</p>
                   </div>
-                  {addingP&&(
-                    <div className="box mb12" style={{borderColor:"rgba(240,165,0,.2)"}}>
-                      <div className="lbl" style={{color:"#f0a500"}}>NEW PROSPECT</div>
-                      <div className="g2 mb10"><Fld label="First Name *" value={newP.firstName} onChange={e=>setNewP(p=>({...p,firstName:e.target.value}))} ph="Sarah"/><Fld label="Last Name" value={newP.lastName} onChange={e=>setNewP(p=>({...p,lastName:e.target.value}))} ph="Johnson"/><Fld label="Title *" value={newP.title} onChange={e=>setNewP(p=>({...p,title:e.target.value}))} ph="VP of Sales"/><Fld label="LinkedIn" value={newP.linkedin} onChange={e=>setNewP(p=>({...p,linkedin:e.target.value}))} ph="linkedin.com/in/..."/></div>
-                      <div className="g2 mb10"><div><div className="fl">Sequence Type</div><select value={newP.seqTypeId} onChange={e=>setNewP(p=>({...p,seqTypeId:e.target.value}))} style={{width:"100%",padding:"7px 9px",borderRadius:6,background:"var(--surf)",border:"1px solid var(--bd)",color:"var(--tx)",fontSize:12,fontFamily:"inherit"}}>{SEQ_TYPES.map(t=><option key={t.id} value={t.id}>{t.icon} {t.label}</option>)}</select></div><div><div className="fl">Buyer Persona</div><select value={newP.personaId} onChange={e=>setNewP(p=>({...p,personaId:e.target.value}))} style={{width:"100%",padding:"7px 9px",borderRadius:6,background:"var(--surf)",border:"1px solid var(--bd)",color:"var(--tx)",fontSize:12,fontFamily:"inherit"}}>{PERSONAS.map(p=><option key={p.id} value={p.id}>{p.icon} {p.label} — {p.sub}</option>)}</select></div></div>
-                      {err&&<div className="err">{err}</div>}
-                      <div className="row gap8"><AB onClick={addProspect} color="#f0a500" sm>Add Prospect</AB><AB onClick={()=>{setAddingP(false);setErr("");}} color="#5a5850" sm>Cancel</AB></div>
-                    </div>
-                  )}
-                  {ap&&(
-                    <div className="fade" key={activePi}>
-                      <div className="row gap12 mb14"><div className="av" style={{width:38,height:38,fontSize:14,background:`hsl(${(activePi||0)*55+180},50%,35%)`}}>{ap.firstName[0]}{ap.lastName?.[0]||""}</div><div><div className="serif" style={{fontSize:18}}>{ap.firstName} {ap.lastName}</div><div style={{fontSize:11,color:"#5a5850"}}>{ap.title} · {co.name}</div></div></div>
-                      <div className="box mb10" style={{borderColor:"rgba(240,165,0,.3)"}}>
-                        <div className="lbl" style={{color:"#f0a500"}}>AUTO RESEARCH — LIVE WEB</div>
-                        <p style={{fontSize:11,color:"#5a5850",marginBottom:12,lineHeight:1.6}}>Claude will search the live web for {ap.firstName} {ap.lastName} and return their intel automatically.</p>
-                        <button onClick={()=>autoResearchPr(activePi)} disabled={ap.analyzing||!profileDone} style={{width:"100%",padding:"11px",borderRadius:8,background:ap.analyzing?"rgba(255,255,255,.04)":"linear-gradient(135deg,rgba(240,165,0,.2),rgba(240,165,0,.1))",border:"1px solid rgba(240,165,0,.4)",color:ap.analyzing?"#5a5850":"#f0a500",fontSize:12,fontWeight:500,cursor:ap.analyzing?"not-allowed":"pointer",fontFamily:"inherit",letterSpacing:".5px",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
-                          {ap.analyzing?<><span className="spin"/>SEARCHING THE WEB...</>:"⚡ AUTO RESEARCH THE WEB"}
-                        </button>
+                  <div style={{padding:"10px 12px",borderRadius:8,background:"rgba(217,119,6,.08)",border:"1px solid rgba(217,119,6,.22)",fontSize:12,color:"#92400e"}}>
+                    <strong>Top Buying Signal:</strong> {coIntel.buyingSignals}
+                  </div>
+                </div>
+              ):(
+                <div className="box mb14">
+                  <div className="lbl">◆ Account Snapshot</div>
+                  <p style={{fontSize:13,color:"#78716c"}}>No intel for this account yet.</p>
+                  <button className="cpbtn pri" onClick={()=>setView("bobi")}>Pull Snapshot →</button>
+                </div>
+              )}
+
+              <div className="between mb10">
+                <div className="lbl" style={{margin:0}}>Prospects</div>
+                <button className="cpbtn pri" onClick={()=>setAddingP(true)}>+ Add Prospect</button>
+              </div>
+
+              {addingP&&(
+                <div className="box mb12">
+                  <div className="g2 mb10">
+                    <Fld label="First Name *" value={newP.firstName} onChange={e=>setNewP(p=>({...p,firstName:e.target.value}))} ph="Sarah"/>
+                    <Fld label="Last Name" value={newP.lastName} onChange={e=>setNewP(p=>({...p,lastName:e.target.value}))} ph="Johnson"/>
+                    <Fld label="Title *" value={newP.title} onChange={e=>setNewP(p=>({...p,title:e.target.value}))} ph="VP of Sales"/>
+                    <Fld label="LinkedIn" value={newP.linkedin} onChange={e=>setNewP(p=>({...p,linkedin:e.target.value}))} ph="linkedin.com/in/..."/>
+                  </div>
+                  <div className="row gap8"><AB onClick={addProspect} color="#d97706" sm>Add Prospect</AB><AB onClick={()=>setAddingP(false)} color="#78716c" sm>Cancel</AB></div>
+                </div>
+              )}
+
+              {prospects.length===0&&<div className="box"><p style={{fontSize:13,color:"#78716c"}}>No prospects yet.</p><button className="cpbtn pri" onClick={()=>setAddingP(true)}>+ Add Prospect</button></div>}
+
+              {prospects.map((p,i)=>{
+                const st=SEQ_TYPES.find(t=>t.id===p.seqTypeId)||SEQ_TYPES[0];
+                const researched=!!p.intel;
+                return(
+                  <div key={i} className="box mb12">
+                    <div className="between mb10">
+                      <div className="row gap10">
+                        <div className="av" style={{width:30,height:30,fontSize:11,background:"#d97706"}}>{p.firstName?.[0]||"?"}{p.lastName?.[0]||""}</div>
+                        <div><div className="serif" style={{fontSize:16}}>{p.firstName} {p.lastName}</div><div style={{fontSize:11,color:"#78716c"}}>{p.title||"—"}</div></div>
                       </div>
-                      <div className="box mb10"><div className="lbl">STEP 1 — RESEARCH QUERY</div><AB onClick={()=>getPrQ(activePi)} loading={ap.loadingQ} disabled={ap.loadingQ} color="#60a5fa">{ap.loadingQ?"Generating...":"Generate Prospect Query"}</AB>{ap.query&&<QBox query={ap.query} copied={copied==="pq"+activePi} onCopy={()=>cp(ap.query,"pq"+activePi)} color="#60a5fa"/>}</div>
-                      <div className="box mb10"><div className="lbl">STEP 2 — PASTE & ANALYZE</div><textarea className="paste" value={ap.pasted} onChange={e=>upP(activePi,"pasted",e.target.value)} placeholder={`Paste findings about ${ap.firstName}...`} rows={4}/>{ap.pasted&&<div style={{fontSize:10,color:"#4ade80",marginTop:3}}>✓ {ap.pasted.split(/\s+/).filter(Boolean).length} words</div>}{err&&<div className="err">{err}</div>}<AB onClick={()=>analyzePr(activePi)} loading={ap.analyzing} disabled={ap.analyzing||!ap.pasted.trim()} color="#60a5fa" style={{marginTop:10}}>{ap.analyzing?"Analyzing...":"Analyze Prospect"}</AB></div>
-                      {ap.intel&&(
-                        <div className="fade">
-                          <div className="row gap12 mb12">
-                            <div className="box" style={{flex:1}}><div className="lbl" style={{color:"#f0a500"}}>OUTREACH ANGLE</div><p style={{fontSize:13,lineHeight:1.8,color:"#fde68a",marginBottom:9}}>{ap.intel.angle}</p><div style={{padding:"8px 11px",background:"rgba(240,165,0,.07)",border:"1px solid rgba(240,165,0,.28)",borderRadius:6}}><div style={{fontSize:9,color:"#f0a500",textTransform:"uppercase",letterSpacing:"2px",marginBottom:4}}>OPENER</div><p style={{fontSize:12,margin:0,fontStyle:"italic",lineHeight:1.7}}>&quot;{ap.intel.opener}&quot;</p></div></div>
-                            <div className="box" style={{border:`2px solid ${ap.intel.warmth==="Champion"?"#4ade80":ap.intel.warmth==="Influencer"?"#60a5fa":ap.intel.warmth==="Gatekeeper"?"#f87171":"#5a5850"}`,textAlign:"center",minWidth:96,padding:"12px 10px"}}><div style={{fontSize:9,color:"#5a5850",textTransform:"uppercase",letterSpacing:"2px",marginBottom:5}}>ROLE</div><div style={{fontSize:12,fontWeight:500,color:ap.intel.warmth==="Champion"?"#4ade80":ap.intel.warmth==="Influencer"?"#60a5fa":ap.intel.warmth==="Gatekeeper"?"#f87171":"#5a5850"}}>{ap.intel.warmth}</div></div>
-                          </div>
-                          <div className="g2 mb14">{PR_SIGNALS.map(sig=>{const items=ap.intel[sig.key]||[];if(!items.length)return null;return <ICard key={sig.key} ca={sig} items={items}/>;})}</div>
-                          <div className="row gap10">
-                            <button onClick={loadIntel} style={{flex:1,padding:"11px",borderRadius:8,background:"rgba(240,165,0,.12)",border:"1px solid rgba(240,165,0,.28)",color:"#f0a500",fontSize:12,fontWeight:500,cursor:"pointer",fontFamily:"inherit",letterSpacing:".5px"}}>USE INTEL → BUILD SEQUENCE</button>
-                            {!ap.sequence&&<button onClick={()=>buildSeq(activePi)} disabled={ap.generating} style={{flex:1,padding:"11px",borderRadius:8,background:ap.generating?"rgba(255,255,255,.04)":"#f0a500",border:"none",color:ap.generating?"#5a5850":"#0a0a08",fontSize:12,fontWeight:500,cursor:ap.generating?"not-allowed":"pointer",fontFamily:"inherit",letterSpacing:".5px",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>{ap.generating?<><span className="spin"/>GENERATING...</>:"GENERATE & TRACK"}</button>}
-                            {ap.sequence&&<button onClick={()=>{setTrackerPi(activePi);setView("tracker");}} style={{flex:1,padding:"11px",borderRadius:8,background:"rgba(74,222,128,.1)",border:"1px solid rgba(74,222,128,.4)",color:"#4ade80",fontSize:12,fontWeight:500,cursor:"pointer",fontFamily:"inherit",letterSpacing:".5px"}}>OPEN IN TRACKER →</button>}
-                          </div>
-                        </div>
-                      )}
+                      <div className="row gap8"><span className="tag" style={{background:`${st.color}18`,color:st.color}}>{st.label}</span><span className="tag" style={{background:researched?"rgba(21,128,61,.12)":"rgba(107,114,128,.12)",color:researched?"#15803d":"#6b7280"}}>{researched?"✓ Researched":"Not researched"}</span></div>
                     </div>
-                  )}
-                  {!ap&&!addingP&&<div style={{textAlign:"center",padding:"40px 20px",color:"#5a5850"}}><div style={{fontSize:32,marginBottom:12,opacity:.3}}>◎</div><p style={{fontSize:13,marginBottom:14}}>No prospects yet.</p><button onClick={()=>setAddingP(true)} style={{padding:"9px 18px",borderRadius:7,background:"rgba(240,165,0,.12)",border:"1px solid rgba(240,165,0,.28)",color:"#f0a500",fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>+ ADD FIRST PROSPECT</button></div>}
-                </>
-              )}
-              {resTab==="brief"&&(
-                <>
-                  <div style={{marginBottom:22}}><div className="eyebrow">RESEARCH HUB</div><h2 className="serif" style={{fontSize:24,fontWeight:400,letterSpacing:"-.5px"}}>Intel Brief</h2><p style={{fontSize:11,color:"#5a5850",marginTop:4}}>{co.name} · {prospects.filter(p=>p.intel).length} prospect(s)</p></div>
-                  <div className="box mb12">
-                    {coIntel&&<><div className="between mb10"><div className="serif" style={{fontSize:16}}>{co.name}</div><span className="tag" style={{background:coIntel.timingScore==="Hot"?"rgba(248,113,113,.14)":"rgba(240,165,0,.14)",color:coIntel.timingScore==="Hot"?"#f87171":"#f0a500"}}>{coIntel.timingScore} Timing</span></div><p style={{fontSize:12,color:"#5a5850",lineHeight:1.75,marginBottom:7}}>{coIntel.snapshot}</p><p style={{fontSize:12,color:"#f0a500",fontStyle:"italic",marginBottom:16}}>◆ {coIntel.buyingSignals}</p><div className="g3 mb16">{CHANGE_AGENTS.map(ca=>{const items=coIntel[ca.key]||[];if(!items.length)return null;return <div key={ca.key} style={{background:"rgba(0,0,0,.3)",borderRadius:6,padding:"9px 11px"}}><div style={{fontSize:9,color:ca.color,textTransform:"uppercase",letterSpacing:"2px",marginBottom:5}}>{ca.icon} {ca.label}</div>{items.slice(0,2).map((it,i)=><div key={i} style={{fontSize:11,color:"#5a5850",lineHeight:1.5,marginBottom:2}}>· {it}</div>)}</div>;})}</div></>}
-                    <div className="divider" style={{margin:"4px 0 16px"}}/>
-                    {prospects.filter(p=>p.intel).map((p,i,arr)=>(
-                      <div key={i} style={{marginBottom:16,paddingBottom:16,borderBottom:i<arr.length-1?"1px solid #2a2924":"none"}}>
-                        <div className="row gap10 mb8"><div className="av" style={{width:28,height:28,fontSize:11,background:`hsl(${i*55+180},50%,35%)`}}>{p.firstName[0]}{p.lastName?.[0]||""}</div><div><div className="serif" style={{fontSize:14}}>{p.firstName} {p.lastName}</div><div style={{fontSize:11,color:"#5a5850"}}>{p.title}</div></div><span className="tag" style={{marginLeft:"auto",background:p.intel.warmth==="Champion"?"rgba(74,222,128,.1)":"rgba(96,165,250,.1)",color:p.intel.warmth==="Champion"?"#4ade80":"#60a5fa"}}>{p.intel.warmth}</span></div>
-                        <div style={{background:"rgba(240,165,0,.06)",border:"1px solid rgba(240,165,0,.28)",borderRadius:6,padding:"9px 11px"}}><p style={{fontSize:12,margin:"0 0 4px",lineHeight:1.65}}>{p.intel.angle}</p><p style={{fontSize:11,color:"#f0a500",margin:0,fontStyle:"italic"}}>Opener: &quot;{p.intel.opener}&quot;</p></div>
-                      </div>
-                    ))}
+                    {researched&&<>
+                      <div style={{padding:"9px 11px",borderRadius:7,background:"rgba(217,119,6,.08)",border:"1px solid rgba(217,119,6,.22)",fontSize:12,color:"#92400e",marginBottom:8}}><strong>Outreach Angle:</strong> {p.intel.angle}</div>
+                      <div style={{padding:"9px 11px",borderRadius:7,background:"#f5f5f4",border:"1px solid #e7e5e4",fontSize:12,color:"#44403c",marginBottom:10}}><strong>Opener:</strong> {p.intel.opener}</div>
+                    </>}
+                    <div className="row gap8 wrap-row">
+                      {researched?<><button className="cpbtn pri" onClick={()=>{setActivePi(i);buildSeq(i);}}>Build Sequence</button><button className="cpbtn" onClick={()=>autoResearchPr(i)}>Re-Research</button><button className="cpbtn" onClick={()=>cp(p.intel?.opener||"","opener"+i)}>Copy Opener</button></>:<button className="cpbtn pri" onClick={()=>autoResearchPr(i)}>⚡ Auto Research {p.firstName}</button>}
+                    </div>
                   </div>
-                  <div className="row gap10">
-                    <button onClick={()=>{const t=`INTEL BRIEF:${co.name}\n\n`+(coIntel?`${coIntel.snapshot}\n${coIntel.buyingSignals}\n\n`:"")+prospects.filter(p=>p.intel).map(p=>`${p.firstName} ${p.lastName}·${p.title}\n${p.intel.angle}\nOpener:"${p.intel.opener}"\n`).join("\n---\n\n");cp(t,"brief");}} style={{flex:1,padding:"11px",borderRadius:8,background:copied==="brief"?"rgba(74,222,128,.1)":"var(--surf)",border:copied==="brief"?"1px solid rgba(74,222,128,.4)":"1px solid var(--bd)",color:copied==="brief"?"#4ade80":"#5a5850",fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>{copied==="brief"?"COPIED":"COPY FULL BRIEF"}</button>
-                    <button onClick={loadIntel} style={{padding:"11px 18px",borderRadius:8,background:"#f0a500",border:"none",color:"#0a0a08",fontSize:12,fontWeight:500,cursor:"pointer",fontFamily:"inherit",letterSpacing:".5px"}}>BUILD SEQUENCE</button>
-                  </div>
-                </>
-              )}
+                );
+              })}
+              {err&&<div className="err">{err}</div>}
             </div>
           )}
 
